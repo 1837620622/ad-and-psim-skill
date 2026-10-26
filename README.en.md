@@ -12,7 +12,7 @@ AI engineering skills for Altium Designer and PSIM. An agent with local tools tu
 | --- | --- | --- |
 | [AD modeling and schematic layout](skills/ad-schematic-layout/SKILL.md) | Create basic schematics, arrange existing circuits against a customer reference, compile in AD, compare pin-level connectivity and export drawings | SchDoc, PrjPcb, EMF/PNG; `native_ad.py` |
 | [PSIM modeling, layout and simulation](skills/psim-simulation-layout/SKILL.md) | Create and modify native circuits, adjust layout and linked labels, run the solver and read actual parameters and waveforms | psimsch, SMV, CSV, EMF/PNG; `native_psim.py` |
-| Engineering checks | Compare connectivity, screen text bounds, calculate time-weighted waveform measurements and verify delivery files | Netlist differences, review records and measurements |
+| Layout and engineering checks | Pre-native layout check, netlist prediction under AD connection rules, text overlap and text-over-line review of native exports, connectivity comparison and time-weighted waveform measurements | Check reports and draft previews, netlist differences, review records and measurements; `check_layout.py`, `review_emf_text.py` |
 
 The agent interprets the task, checks models, plans the layout and invokes the tools. This package supplies execution helpers and engineering methods. Complex devices, controller models and design targets still require project-specific verification. AD schematic compilation and PSIM circuit simulation are separate checks.
 
@@ -21,11 +21,12 @@ The agent interprets the task, checks models, plans the layout and invokes the t
 1. Read the current requirements, source project and reference drawings; define the scope and deliverables.
 2. Check software versions, native libraries, pins, parameters, coordinates and export behavior; validate a representative section first.
 3. Build an editable circuit. Follow power or signal flow and keep supplies, clocks, sensing, compensation and feedback near the relevant devices.
-4. Save and reopen the native project. Compile and compare connectivity in AD; run the required operating conditions and read results in PSIM.
-5. Inspect the complete export and critical details. Correct text collisions, spacing, alignment, blank areas and clipping, then recheck electrical relationships.
-6. Deliver the agreed files. Check archive CRC, extracted file hashes and native reopening.
+4. Run the layout check until it reports 0 errors. `create` refuses to write a drawing that fails the check.
+5. Save and reopen the native project. Compile and compare connectivity in AD; run the required operating conditions and read results in PSIM.
+6. Native exports include a review of text overlap, clipping and text crossed by lines. Inspect the complete export and critical details, correct spacing, alignment, blank areas and clipping, then recheck electrical relationships.
+7. Deliver the agreed files. Check archive CRC, extracted file hashes and native reopening.
 
-Use conventional engineering drafting: a consistent grid, orthogonal local wiring, clear junctions and linked component text. Avoid arbitrary component matrices, decorative panels and excessive blank space. Layout-only changes preserve component parameters and port-level connectivity. Single-sheet or single-symbol requirements apply when requested for the current task.
+Use conventional engineering drafting: a consistent grid, orthogonal local wiring, clear junctions and linked component text. Avoid arbitrary component matrices, decorative panels and excessive blank space. Grid, text placement, spacing, proportions and value notation are specified numerically in the [AD drafting rules](skills/ad-schematic-layout/references/drafting-rules.md) and [PSIM drafting rules](skills/psim-simulation-layout/references/drafting-rules.md). Layout-only changes preserve component parameters and port-level connectivity. Single-sheet or single-symbol requirements apply when requested for the current task.
 
 See the [AD reference notes](skills/ad-schematic-layout/references/professional-gallery.md) and [PSIM reference notes](skills/psim-simulation-layout/references/professional-gallery.md). The public repository links to official sources and provides original guidance; it does not distribute customer screenshots or copies of vendor manuals.
 
@@ -45,7 +46,7 @@ python scripts/install_skills.py --profile common --profile claude --profile zco
 python scripts/install_skills.py --profile common --profile claude --profile zcode --check
 ```
 
-Install only the profiles you need: `common` uses the shared skill directory for Codex and DSH, `claude` targets Claude Code, and `zcode` targets ZCode. The installer creates directory junctions on Windows and symbolic links elsewhere. Existing directories with different contents are preserved and reported as conflicts. It does not install AD/PSIM or grant software licenses.
+Install only the profiles you need: `common` targets `~/.agents/skills`, which Codex, Gemini CLI, GitHub Copilot, Cursor, OpenCode and DSH all read; `claude` targets Claude Code, and `zcode` targets ZCode. The installer creates directory junctions on Windows and symbolic links elsewhere. Existing directories with different contents are preserved and reported as conflicts. It does not install AD/PSIM or grant software licenses.
 
 Install optional dependencies in your own Python environment when needed:
 
@@ -81,13 +82,14 @@ Preserve devices, parameters and port-level connectivity.
 Reopen natively, compare connectivity and properties, then inspect the complete export and critical details.
 ```
 
-Grok and other models need a host that supplies local tools. A chat model alone cannot operate desktop software. A host can also load the relevant SKILL.md explicitly and resolve its references and scripts relative to that directory.
+The skills do not depend on a model vendor: Claude, GPT, Gemini, Grok, DeepSeek, Qwen and others work when the host supplies local file, command and image tools. A chat model alone cannot operate desktop software. Layout quality is decided by numeric rules and automatic checks rather than model taste; see [COMPATIBILITY.md](COMPATIBILITY.md). A host can also load the relevant SKILL.md explicitly and resolve its references and scripts relative to that directory.
 
 ## Runnable basic examples
 
-Create a basic AD RC schematic from the repository root:
+From the repository root, run the layout check with a draft preview, then create the basic AD RC schematic. Neither step needs AD, so both run on any system:
 
 ```powershell
+python skills/ad-schematic-layout/scripts/check_layout.py skills/ad-schematic-layout/assets/rc-filter-plan.json --preview work/draft.png
 python skills/ad-schematic-layout/scripts/native_ad.py create skills/ad-schematic-layout/assets/rc-filter-plan.json work/ad
 ```
 
@@ -95,6 +97,7 @@ For PSIM, set the actual installation directory, then create, simulate and expor
 
 ```powershell
 $psimDir = "C:\Path\To\PSIM"
+python skills/psim-simulation-layout/scripts/check_layout.py skills/psim-simulation-layout/assets/rc-filter-plan.json
 python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir" version
 python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir" create skills/psim-simulation-layout/assets/rc-filter-plan.json work/psim/RC_Filter.psimsch
 python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir" simulate work/psim/RC_Filter.psimsch work/psim-result
@@ -125,7 +128,7 @@ Run the portable helper checks with:
 python -m unittest discover -s tests -v
 ```
 
-Actual Codex skill discovery was checked. Claude Code, ZCode and DSH have discovery-directory adapters, but a complete design task was not run in each host. Grok depends on its host integration. The native Windows backends have not been directly validated on macOS or Linux.
+Actual Codex skill discovery was checked. Claude Code, Gemini CLI, GitHub Copilot, Cursor, OpenCode, ZCode and DSH have adapters for their documented discovery directories, but a complete design task was not run in each host. Grok and other models depend on their host integration. The native Windows backends have not been directly validated on macOS or Linux.
 
 ## Authorization, contact and issues
 

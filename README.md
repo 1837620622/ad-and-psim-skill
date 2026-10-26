@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | [AD 建模与原理图排版](skills/ad-schematic-layout/SKILL.md) | 创建基础原理图、按客户参考整理布局、调用 AD 编译、比较逐引脚网络、导出图纸 | SchDoc、PrjPcb、EMF/PNG；`native_ad.py` |
 | [PSIM 建模、排版与仿真](skills/psim-simulation-layout/SKILL.md) | 创建和修改原生电路、调整布局与关联标注、运行求解、读回真实参数与波形 | psimsch、SMV、CSV、EMF/PNG；`native_psim.py` |
-| 工程质量检查 | 网络变化比较、文字字框筛查、按时间加权的波形测量、交付复核 | 网表差异、检查记录、统计结果 |
+| 排版与工程检查 | 原生建模前的排版预检、按 AD 规则预测网表、原生出图的文字重叠与压线审查、网络变化比较、按时间加权的波形测量 | 预检报告与草图、网表差异、审查记录、统计结果；`check_layout.py`、`review_emf_text.py` |
 
 AI 负责理解任务、查模型、制定布局并调用工具。本包提供执行入口与工程方法；复杂器件、芯片模型和具体设计指标仍须按项目核验。AD 原理图编译与 PSIM 电路仿真是不同的检查。
 
@@ -21,11 +21,12 @@ AI 负责理解任务、查模型、制定布局并调用工具。本包提供�
 1. 读取当前要求、原工程和参考图，明确本次范围及交付格式。
 2. 核对软件版本、原生库、引脚、参数、坐标和导出方式，先验证代表性局部。
 3. 建立可编辑电路，按功率或信号流布局，将供电、时钟、采样、补偿和反馈就近成组。
-4. 保存并原生重开；AD 编译和核对网络，PSIM 按所需工况求解并读取数据。
-5. 查看完整导出及关键局部，修正压线、字距、对齐、留白与裁切，再核对电气关系。
-6. 按约定清单交付，打包后检查 CRC、解压哈希与原生复开。
+4. 运行排版预检，修到 0 error；`create` 遇到预检 error 会拒绝写出。
+5. 保存并原生重开；AD 编译和核对网络，PSIM 按所需工况求解并读取数据。
+6. 原生出图自带文字重叠、越界与压线审查；再查看完整导出及关键局部，修正字距、对齐、留白与裁切，并核对电气关系。
+7. 按约定清单交付，打包后检查 CRC、解压哈希与原生复开。
 
-图纸采用常规工程样式：统一栅格、正交短线、清楚连接点和关联文字，避免无意义的元件矩阵、装饰面板及大块空白。仅整理排版时，保留原有器件参数和逐端口连接。单页、单芯片等要求按当前客户任务执行。
+图纸采用常规工程样式：统一栅格、正交短线、清楚连接点和关联文字，避免无意义的元件矩阵、装饰面板及大块空白。栅格、字位、间距、比例与参数写法都有具体数值，见 [AD 排版硬规则](skills/ad-schematic-layout/references/drafting-rules.md) 与 [PSIM 排版硬规则](skills/psim-simulation-layout/references/drafting-rules.md)。仅整理排版时，保留原有器件参数和逐端口连接。单页、单芯片等要求按当前客户任务执行。
 
 专业风格参考见 [AD 图例观察要点](skills/ad-schematic-layout/references/professional-gallery.md) 与 [PSIM 图例观察要点](skills/psim-simulation-layout/references/professional-gallery.md)。公开仓库提供官方来源链接和原创方法，不附客户截图或厂商手册副本。
 
@@ -45,7 +46,7 @@ python scripts/install_skills.py --profile common --profile claude --profile zco
 python scripts/install_skills.py --profile common --profile claude --profile zcode --check
 ```
 
-只安装需要的入口即可：`common` 用于 Codex 与 DSH 的共享技能目录，`claude` 用于 Claude Code，`zcode` 用于 ZCode。Windows 创建目录联接，其他平台创建符号链接；不同内容的同名目录会保留并报冲突。安装器不安装 AD/PSIM，也不授予软件使用权。
+只安装需要的入口即可：`common` 对应 `~/.agents/skills`，Codex、Gemini CLI、GitHub Copilot、Cursor、OpenCode 与 DSH 都读取该目录；`claude` 用于 Claude Code，`zcode` 用于 ZCode。Windows 创建目录联接，其他平台创建符号链接；不同内容的同名目录会保留并报冲突。安装器不安装 AD/PSIM，也不授予软件使用权。
 
 PNG 渲染或辅助读取需要相应依赖时，可在自己的 Python 环境中安装：
 
@@ -80,13 +81,14 @@ python -m pip install -r requirements-optional.txt
 完成后原生重开，比较网络与属性，再检查完整导出图及关键局部。
 ```
 
-Grok 等模型需要由具体宿主提供本地工具；单独的聊天模型不能直接操作桌面软件。也可让宿主显式读取对应 SKILL.md，再按其相对路径调用参考和脚本。
+技能对模型品牌没有要求，Claude、GPT、Gemini、Grok、DeepSeek、Qwen 等模型都可使用，前提是宿主提供本地文件、命令和看图工具；单独的聊天模型不能直接操作桌面软件。排版质量由数字化规则和自动检查判定，不依赖模型的审美，详见[兼容说明](COMPATIBILITY.md)。也可让宿主显式读取对应 SKILL.md，再按其相对路径调用参考和脚本。
 
 ## 可运行的基础示例
 
-从仓库根目录创建 AD 基础 RC 图纸：
+从仓库根目录先做排版预检并生成草图，再创建 AD 基础 RC 图纸（这两步不需要 AD，任何系统都能运行）：
 
 ```powershell
+python skills/ad-schematic-layout/scripts/check_layout.py skills/ad-schematic-layout/assets/rc-filter-plan.json --preview work/draft.png
 python skills/ad-schematic-layout/scripts/native_ad.py create skills/ad-schematic-layout/assets/rc-filter-plan.json work/ad
 ```
 
@@ -94,6 +96,7 @@ PSIM 示例先设置实际安装目录，再创建、求解和导出：
 
 ```powershell
 $psimDir = "C:\Path\To\PSIM"
+python skills/psim-simulation-layout/scripts/check_layout.py skills/psim-simulation-layout/assets/rc-filter-plan.json
 python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir" version
 python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir" create skills/psim-simulation-layout/assets/rc-filter-plan.json work/psim/RC_Filter.psimsch
 python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir" simulate work/psim/RC_Filter.psimsch work/psim-result
@@ -124,7 +127,7 @@ AD 基础示例为 0 错误、4 条警告；这不等于零警告或可直接制
 python -m unittest discover -s tests -v
 ```
 
-Codex 的实际技能发现已验证。Claude Code、ZCode、DSH 已按发现目录适配，未逐个运行完整设计任务；Grok 依赖宿主接入。原生 Windows 后端不代表已在 macOS/Linux 上直接验证。
+Codex 的实际技能发现已验证。Claude Code、Gemini CLI、GitHub Copilot、Cursor、OpenCode、ZCode、DSH 已按官方发现目录适配，未逐个运行完整设计任务；Grok 等其他模型依赖宿主接入。原生 Windows 后端不代表已在 macOS/Linux 上直接验证。
 
 ## 授权、联系与反馈
 

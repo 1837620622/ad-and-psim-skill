@@ -99,6 +99,10 @@ def write_compound(path, streams):
     directory = entry('Root Entry', 5, mini_start, len(mini_data))
     for i, name in enumerate(names, 1):
         directory += entry(name, 2, starts[name], len(streams[name]), i)
+    # 未使用的目录项按 CFB 规范全零，但左右兄弟和子节点须为 NOSTREAM。
+    unused = bytearray(128)
+    struct.pack_into('<III', unused, 68, FREE, FREE, FREE)
+    directory += bytes(unused) * (-len(directory) // 128 % 4)
     directory_start = allocate(directory)
     fat_count = 1
     while math.ceil((len(sectors) + fat_count) / 128) > fat_count:
@@ -139,7 +143,10 @@ class Sheet:
     def __init__(self, size=(5400, 4200)):
         template = [{'HEADER': 'Protel for Windows - Schematic Capture Binary File Version 5.0', 'WEIGHT': '1'}, {'RECORD': '31', 'FONTIDCOUNT': '9', 'SIZE1': '9', 'FONTNAME1': 'Times New Roman', 'SIZE2': '8', 'FONTNAME2': 'Times New Roman', 'SIZE3': '12', 'FONTNAME3': 'Times New Roman', 'SIZE4': '16', 'FONTNAME4': 'Times New Roman', 'SIZE5': '11', 'FONTNAME5': 'Times New Roman', 'SIZE6': '8', 'FONTNAME6': 'Times New Roman', 'SIZE7': '12', 'FONTNAME7': 'Times New Roman', 'SIZE8': '9', 'FONTNAME8': 'Times New Roman', 'USEMBCS': 'T', 'ISBOC': 'T', 'HOTSPOTGRIDON': 'T', 'HOTSPOTGRIDSIZE': '10', 'SHEETSTYLE': '3', 'USECUSTOMSHEET': 'T', 'SYSTEMFONT': '1', 'BORDERON': 'F', 'TITLEBLOCKON': 'F', 'SHEETNUMBERSPACESIZE': '4', 'AREACOLOR': '16777215', 'SNAPGRIDON': 'T', 'SNAPGRIDSIZE': '10', 'VISIBLEGRIDON': 'T', 'VISIBLEGRIDSIZE': '10', 'CUSTOMX': '5400', 'CUSTOMY': '4200', 'CUSTOMXZONES': '6', 'CUSTOMYZONES': '5', 'CUSTOMMARGINWIDTH': '20', 'DISPLAY_UNIT': '4', 'REFERENCEZONESON': 'F', 'SIZE9': '12', 'FONTNAME9': 'SimSun'}]
         self.records = copy.deepcopy(template[:2])
+        # 分区数随图幅变化，小图纸不挤满 6×5 的分区标记。
         self.records[1].update(CUSTOMX=str(size[0]), CUSTOMY=str(size[1]),
+                               CUSTOMXZONES=str(min(8, max(2, round(size[0] / 100)))),
+                               CUSTOMYZONES=str(min(6, max(2, round(size[1] / 100)))),
                                SIZE1='9', SIZE2='8', SIZE3='12', SIZE4='16',
                                AREACOLOR='16777215', FONTIDCOUNT='9', SIZE9='12', FONTNAME9='SimSun')
         self.pins = {}
@@ -198,7 +205,11 @@ class Sheet:
                         SHOWNETNAME='T', **{'LOCATION.X': x, 'LOCATION.Y': y,
                         'ORIENTATION': 3 if ground else 1, 'COLOR': 128, 'TEXT': name})
 
-    def component(self, ref, name, body, pins, comment=None, comment_pos=None, des_pos=None):
+    def font_size(self, font):
+        return float(self.records[1].get(f'SIZE{font}', 9))
+
+    def component(self, ref, name, body, pins, comment=None, comment_pos=None, des_pos=None,
+                  pin_length=20, font=1):
         x1, y1, x2, y2 = body
         idx = self.add(1, LIBREFERENCE=name, PARTCOUNT=2, DISPLAYMODECOUNT=1,
                        OWNERPARTID=-1, **{'LOCATION.X': (x1+x2)/2,
@@ -209,86 +220,98 @@ class Sheet:
         self.rect(*body, owner=idx, fill=True)
         self.pins[ref] = {}
         for num, pname, x, y, direction, etype in pins:
-            length = 18
             dx, dy = ((1, 0), (0, 1), (-1, 0), (0, -1))[direction]
-            px, py = x + dx*length, y + dy*length
             self.add(2, OWNERINDEX=idx-1, OWNERPARTID=1, FORMALTYPE=1,
-                     ELECTRICAL=etype, PINCONGLOMERATE=56+direction, PINLENGTH=length,
+                     ELECTRICAL=etype, PINCONGLOMERATE=56+direction, PINLENGTH=pin_length,
                      **{'LOCATION.X': x, 'LOCATION.Y': y, 'NAME': pname,
                         'DESIGNATOR': num, 'SWAPIDPART': 1, 'COLOR': 0})
-            self.pins[ref][str(num)] = (px, py)
-        des_pos = des_pos or (x1, y2+10)
+            self.pins[ref][str(num)] = (x + dx*pin_length, y + dy*pin_length)
+        # 默认位号在器件框上方、注释在下方，避免文字压住框线或引脚名。
+        height = self.font_size(font)
+        des_pos = des_pos or (x1, y2 + 3)
         self.add(34, OWNERINDEX=idx-1, INDEXINSHEET=-1, OWNERPARTID=-1,
                  **{'LOCATION.X': des_pos[0], 'LOCATION.Y': des_pos[1], 'COLOR': 8388608,
-                    'FONTID': 1, 'TEXT': ref, 'NAME': 'Designator', 'READONLYSTATE': 1})
-        pos = comment_pos or ((x1+x2)/2, (y1+y2)/2)
+                    'FONTID': font, 'TEXT': ref, 'NAME': 'Designator', 'READONLYSTATE': 1})
+        pos = comment_pos or (x1, y1 - 3 - height)
         self.add(41, OWNERINDEX=idx-1, INDEXINSHEET=-1, OWNERPARTID=-1,
                  **{'LOCATION.X': pos[0], 'LOCATION.Y': pos[1], 'COLOR': 8388608,
-                    'FONTID': 1, 'TEXT': comment or name, 'NAME': 'Comment'})
+                    'FONTID': font, 'TEXT': comment or name, 'NAME': 'Comment'})
         return idx
 
-    def passive(self, ref, value, x, y, vertical=False, kind='R'):
-        delta = 20
-        pins = [('1','1',x,y+delta,1,4),('2','2',x,y-delta,3,4)] if vertical else [
-            ('1','1',x-delta,y,2,4),('2','2',x+delta,y,0,4)]
+    def passive(self, ref, value, x, y, vertical=False, kind='R', scale=.5, grid=10, font=1,
+                des_pos=None, comment_pos=None):
+        """按比例绘制两脚无源件；引脚热端始终落在栅格上，文字保持完整字高。"""
+        s = scale
+        reach = round(20*s)
+        hot = max(grid, round((20*s + 12*s) / grid) * grid)
+        if hot - reach < 2:
+            hot += grid
+        length = hot - reach
+
+        def at(u, v):
+            # u 沿引脚轴向，v 为横向；竖放时轴向朝上。
+            return (x - v, y + u) if vertical else (x + u, y + v)
+
         idx = self.add(1, LIBREFERENCE=kind, PARTCOUNT=2, DISPLAYMODECOUNT=1, OWNERPARTID=-1,
-                       **{'LOCATION.X':x,'LOCATION.Y':y,'ORIENTATION':0,'CURRENTPARTID':1,
-                       'LIBRARYPATH':'*','SOURCELIBRARYNAME':'*','SHEETPARTFILENAME':'*',
-                       'TARGETFILENAME':'*','UNIQUEID':hashlib.sha256(ref.encode()).hexdigest()[:8].upper(),
-                       'COLOR':128,'DESIGNITEMID':kind})
+                       **{'LOCATION.X': x, 'LOCATION.Y': y, 'ORIENTATION': 0, 'CURRENTPARTID': 1,
+                          'LIBRARYPATH': '*', 'SOURCELIBRARYNAME': '*', 'SHEETPARTFILENAME': '*',
+                          'TARGETFILENAME': '*', 'UNIQUEID': hashlib.sha256(ref.encode()).hexdigest()[:8].upper(),
+                          'COLOR': 128, 'DESIGNITEMID': kind})
         self.pins[ref] = {}
-        for num,pname,px,py,direction,etype in pins:
-            dx,dy=((1,0),(0,1),(-1,0),(0,-1))[direction]
-            length=12
-            self.add(2,OWNERINDEX=idx-1,OWNERPARTID=1,FORMALTYPE=1,ELECTRICAL=4,
-                     PINCONGLOMERATE=32+direction,PINLENGTH=length,
-                     **{'LOCATION.X':px,'LOCATION.Y':py,'NAME':pname,'DESIGNATOR':num,'SWAPIDPART':1,'COLOR':0})
-            self.pins[ref][num]=(px+dx*length,py+dy*length)
-        if kind=='C':
-            if vertical:
-                self.line((x-12,y+3),(x+12,y+3),owner=idx)
-                self.line((x-12,y-3),(x+12,y-3),owner=idx)
-                self.line((x,y+20),(x,y+3),owner=idx)
-                self.line((x,y-20),(x,y-3),owner=idx)
-            else:
-                self.line((x-3,y-12),(x-3,y+12),owner=idx)
-                self.line((x+3,y-12),(x+3,y+12),owner=idx)
-                self.line((x-20,y),(x-3,y),owner=idx)
-                self.line((x+20,y),(x+3,y),owner=idx)
-        elif kind=='L':
-            pts=[]
-            for c in (-15,-5,5,15):
+        # 横放时 1 脚在左、竖放时 1 脚在上，与原有计划的引脚编号保持一致。
+        ends = ((1, '1', 1), (-1, '2', 3)) if vertical else ((-1, '1', 2), (1, '2', 0))
+        for sign, num, direction in ends:
+            px, py = at(sign*reach, 0)
+            self.add(2, OWNERINDEX=idx-1, OWNERPARTID=1, FORMALTYPE=1, ELECTRICAL=4,
+                     PINCONGLOMERATE=32+direction, PINLENGTH=length,
+                     **{'LOCATION.X': px, 'LOCATION.Y': py, 'NAME': num, 'DESIGNATOR': num,
+                        'SWAPIDPART': 1, 'COLOR': 0})
+            self.pins[ref][num] = at(sign*hot, 0)
+        half = 0
+        if kind == 'C':
+            gap, plate = max(2, round(4*s)), round(14*s)
+            for u in (-gap, gap):
+                self.line(at(u, -plate), at(u, plate), owner=idx)
+            self.line(at(-reach, 0), at(-gap, 0), owner=idx)
+            self.line(at(reach, 0), at(gap, 0), owner=idx)
+            half = plate
+        elif kind == 'L':
+            pts = []
+            for c in (-15, -5, 5, 15):
                 for i in range(9):
-                    a=math.pi*(1-i/8)
-                    px=c+5*math.cos(a);py=6*math.sin(a)
-                    pts.append((round(x-py),round(y+px))if vertical else(round(x+px),round(y+py)))
-            kw={'OWNERINDEX':idx-1,'OWNERPARTID':1,'OWNERPARTDISPLAYMODE':0,'ISNOTACCESIBLE':'T',
-                'LINEWIDTH':1,'COLOR':8388608,'LOCATIONCOUNT':len(pts)}
-            for i,(px,py)in enumerate(pts,1):kw[f'X{i}']=px;kw[f'Y{i}']=py
-            self.add(6,**kw)
-        elif kind=='Y':
-            if vertical:
-                self.rect(x-13,y-9,x+13,y+9,owner=idx)
-                self.line((x-17,y-14),(x+17,y-14),owner=idx)
-                self.line((x-17,y+14),(x+17,y+14),owner=idx)
-                self.line((x,y-20),(x,y-14),owner=idx)
-                self.line((x,y+20),(x,y+14),owner=idx)
-            else:
-                self.rect(x-9,y-13,x+9,y+13,owner=idx)
-                self.line((x-14,y-17),(x-14,y+17),owner=idx)
-                self.line((x+14,y-17),(x+14,y+17),owner=idx)
-                self.line((x-20,y),(x-14,y),owner=idx)
-                self.line((x+20,y),(x+14,y),owner=idx)
+                    a = math.pi*(1-i/8)
+                    pts.append(tuple(round(v) for v in at(s*(c + 5*math.cos(a)), s*6*math.sin(a))))
+            kw = {'OWNERINDEX': idx-1, 'OWNERPARTID': 1, 'OWNERPARTDISPLAYMODE': 0, 'ISNOTACCESIBLE': 'T',
+                  'LINEWIDTH': 1, 'COLOR': 8388608, 'LOCATIONCOUNT': len(pts)}
+            for i, (px, py) in enumerate(pts, 1):
+                kw[f'X{i}'] = px
+                kw[f'Y{i}'] = py
+            self.add(6, **kw)
+            half = round(6*s)
+        elif kind == 'Y':
+            box, plate = round(9*s), round(14*s)
+            (ax, ay), (bx, by) = at(-box, -round(13*s)), at(box, round(13*s))
+            self.rect(min(ax, bx), min(ay, by), max(ax, bx), max(ay, by), owner=idx)
+            for u in (-plate, plate):
+                self.line(at(u, -round(17*s)), at(u, round(17*s)), owner=idx)
+                self.line(at(u, 0), at(reach if u > 0 else -reach, 0), owner=idx)
+            half = round(17*s)
         else:
-            self.rect(x-5 if vertical else x-20,y-20 if vertical else y-5,
-                      x+5 if vertical else x+20,y+20 if vertical else y+5,owner=idx)
-        ox,oy=(15,12) if vertical else (-18,18)
-        self.add(34,OWNERINDEX=idx-1,INDEXINSHEET=-1,OWNERPARTID=-1,
-                 **{'LOCATION.X':x+ox,'LOCATION.Y':y+oy,'COLOR':8388608,'FONTID':2,
-                    'TEXT':ref,'NAME':'Designator','READONLYSTATE':1})
-        self.add(41,OWNERINDEX=idx-1,INDEXINSHEET=-1,OWNERPARTID=-1,
-                 **{'LOCATION.X':x+ox,'LOCATION.Y':y+oy-14,'COLOR':8388608,'FONTID':2,
-                    'TEXT':value,'NAME':'Comment'})
+            half = max(2, round(6*s))
+            (ax, ay), (bx, by) = at(-reach, -half), at(reach, half)
+            self.rect(min(ax, bx), min(ay, by), max(ax, bx), max(ay, by), owner=idx)
+        height = self.font_size(font)
+        if vertical:
+            des_pos = des_pos or (x + half + 3, y + 1)
+            comment_pos = comment_pos or (x + half + 3, y - 1 - height)
+        else:
+            des_pos = des_pos or (x - reach, y + half + 2 + round(1.1*height))
+            comment_pos = comment_pos or (x - reach, y + half + 1)
+        for record, pos, text, name in ((34, des_pos, ref, 'Designator'), (41, comment_pos, value, 'Comment')):
+            extra = {'READONLYSTATE': 1} if record == 34 else {}
+            self.add(record, OWNERINDEX=idx-1, INDEXINSHEET=-1, OWNERPARTID=-1,
+                     **{'LOCATION.X': pos[0], 'LOCATION.Y': pos[1], 'COLOR': 8388608, 'FONTID': font,
+                        'TEXT': text, 'NAME': name}, **extra)
         return idx
 
     def save(self, path):

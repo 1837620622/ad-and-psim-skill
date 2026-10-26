@@ -1,16 +1,14 @@
 """以解析关系核对测量与连接检查，不依赖本机客户工程。"""
 from pathlib import Path
-import json
 import math
-import struct
 import sys
 import tempfile
 import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'skills/ad-schematic-layout/scripts'),str(ROOT/'skills/psim-simulation-layout/scripts')]
-from compare_pin_nets import compare,load_pin_map
-from analyze_waveform import load_csv,measure,moments,mean_product,clip,gate_frequency
+from compare_pin_nets import compare,load_pin_map  # noqa: E402
+from analyze_waveform import load_csv,measure,moments,mean_product,clip,gate_frequency  # noqa: E402
 
 
 class Measurements(unittest.TestCase):

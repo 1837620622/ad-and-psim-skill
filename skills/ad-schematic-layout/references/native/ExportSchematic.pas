@@ -18,10 +18,20 @@ Begin
         SourcePath := Copy(Entry, 1, Sep-1);
         TargetPath := Copy(Entry, Sep+1, Length(Entry));
         ServerDoc := Client.OpenDocument('SCH', SourcePath);
-        If ServerDoc = Nil Then Exit;
+        If ServerDoc = Nil Then
+        Begin
+            Status.Add('Failed=OpenDocument ' + SourcePath);
+            Status.SaveToFile('__STATUS__');
+            Exit;
+        End;
         Client.ShowDocument(ServerDoc);
         Doc := SchServer.GetSchDocumentByPath(SourcePath);
-        If Doc = Nil Then Exit;
+        If Doc = Nil Then
+        Begin
+            Status.Add('Failed=GetSchDocumentByPath ' + SourcePath);
+            Status.SaveToFile('__STATUS__');
+            Exit;
+        End;
         Picture := TMetafile.Create;
         Picture.Enhanced := True;
         Picture.Width := 6000;

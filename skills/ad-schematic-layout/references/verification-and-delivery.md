@@ -43,7 +43,7 @@ python scripts/compare_pin_nets.py expected.json native-nets.txt --output check.
 python scripts/review_emf_text.py drawing.emf --output text-review.json
 ```
 
-可按实际图框传入 `--border "xmin,ymin,xmax,ymax"`。这些是 EMF 设备坐标，不能默认等于 AD 坐标。工具报告受支持的文字记录数量、重叠字框和边界问题；没有检测出的字体记录会单独列出。它不检测压线、器件遮挡、参数真实性和视觉重心。
+可按实际图框传入 `--border "xmin,ymin,xmax,ymax"`。这些是 EMF 设备坐标，不能默认等于 AD 坐标。工具报告受支持的文字记录数量、重叠字框、越界，以及被导线、引脚、器件轮廓或圆形穿过的文字（`text_line_conflicts`）；线条按 EMF 映射模式换算，并用记录自带范围核对换算是否可靠。圆弧记录、器件遮挡、参数真实性和视觉重心不在检查范围内。`native_ad.py export` 自动附带同一审查的摘要。
 
 实际审图至少覆盖：
 

@@ -14,17 +14,20 @@ Var
     Net : INet;
     NetPin : INetItem;
     Cancelled : LongBool;
+    Found : Boolean;
 Begin
     Inputs := TStringList.Create;
     Inputs.LoadFromFile('__INPUTS__');
     Requested := Inputs.Strings(0);
     Workspace := GetWorkspace;
     Workspace.DM_OpenProject(Requested, True);
+    Found := False;
     For I := 0 To Workspace.DM_ProjectCount - 1 Do
     Begin
         Project := Workspace.DM_Projects(I);
         If UpperCase(Project.DM_ProjectFullPath) = UpperCase(Requested) Then
         Begin
+            Found := True;
             Lines := TStringList.Create;
             Lines.Add('Project=' + Project.DM_ProjectFullPath);
             For J := 1 To Inputs.Count - 1 Do
@@ -79,6 +82,13 @@ Begin
             Lines.SaveToFile('__MESSAGES__');
             Lines.Free;
         End;
+    End;
+    If Not Found Then
+    Begin
+        Lines := TStringList.Create;
+        Lines.Add('Failed=Project not found in workspace: ' + Requested);
+        Lines.SaveToFile('__STATUS__');
+        Lines.Free;
     End;
     Inputs.Free;
 End;

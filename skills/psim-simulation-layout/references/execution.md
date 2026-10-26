@@ -8,6 +8,7 @@
 
 | 操作 | 命令 |
 |---|---|
+| 排版预检（无需 PSIM） | `python scripts/check_layout.py assets/rc-filter-plan.json --output work/layout.json` |
 | 验证原生 API 版本 | `python scripts/native_psim.py --psim-dir PSIM_DIR version` |
 | 查真实类型与字段 | `python scripts/native_psim.py --psim-dir PSIM_DIR --report actual.json inspect model.psimsch` |
 | 创建可编辑电路 | `python scripts/native_psim.py --psim-dir PSIM_DIR create assets/rc-filter-plan.json work/RC_Filter.psimsch` |
@@ -16,11 +17,11 @@
 | 改参数并保存副本 | `python scripts/native_psim.py --psim-dir PSIM_DIR edit model.psimsch changes.json changed.psimsch` |
 | 导出原生可重建脚本 | `python scripts/native_psim.py --psim-dir PSIM_DIR to-python model.psimsch model-export.py` |
 
-输出已存在时默认拒绝覆盖，仿真使用新目录以免把旧结果当新结果。create/edit 可显式给 --overwrite，但 edit 不覆盖输入模型。export 保留完整 EMF/PNG，并附仅裁掉空白的 compact.png；紧凑裁图不改变模型布局，也不能补回原生导出中已经丢失的图元。
+输出已存在时默认拒绝覆盖，仿真使用新目录以免把旧结果当新结果。create/edit 可显式给 --overwrite，但 edit 不覆盖输入模型。create 在初始化 PSIM 前运行与 `check_layout.py` 相同的预检，存在 error 时拒绝创建，输出中的 `layout_check` 列出其余 warning。export 保留完整 EMF/PNG，并附仅裁掉空白的 compact.png，结果中的 `text_review` 是对原生 EMF 的文字重叠、越界和压线审查；紧凑裁图不改变模型布局，也不能补回原生导出中已经丢失的图元。
 
 ## JSON 建模计划
 
-[可运行 RC 计划](../assets/rc-filter-plan.json)用于接口与解析解验证，实际项目按专业图例设计版式。
+[可运行 RC 计划](../assets/rc-filter-plan.json)用于接口与解析解验证，并按[排版硬规则](drafting-rules.md)摆放：仿真控制在角落，探头名在探头右侧，参数用 1u 这类后缀。实际项目按专业图例设计版式。
 
 每个 element 含 type、name、attributes，attributes 直接传给当前本机 PsimCreateNewElement；不套用别的软件字段。PORTS 的第一个点、DIRECTION、AREA 和尺寸先查本机原生导出，不能用更多点强行拉伸符号。
 

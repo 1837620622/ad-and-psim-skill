@@ -3,186 +3,70 @@
     {
       "type": "SIMCONTROL",
       "name": "",
-      "attributes": {
-        "POINT": "{100,40}",
-        "TIMESTEP": "1e-6",
-        "TOTALTIME": "0.002",
-        "PRINTTIME": "0",
-        "PRINTSTEP": "1"
-      }
+      "attributes": {"POINT": "{40,50}", "TIMESTEP": "1e-6", "TOTALTIME": "0.002", "PRINTTIME": "0", "PRINTSTEP": "1"}
     },
     {
       "type": "VDC",
       "name": "V1",
-      "attributes": {
-        "PORTS": "{100,100}",
-        "DIRECTION": 0,
-        "Amplitude": 10
-      },
+      "attributes": {"PORTS": "{100,100}", "DIRECTION": 0, "Amplitude": 10},
       "textlinks": [
-        {
-          "FieldName": "Name",
-          "FieldIndex": 0,
-          "AREA": [
-            115,
-            101,
-            152,
-            118
-          ]
-        },
-        {
-          "FieldName": "Amplitude",
-          "FieldIndex": 1,
-          "AREA": [
-            115,
-            119,
-            160,
-            136
-          ]
-        }
+        {"FieldName": "Name", "FieldIndex": 0, "AREA": [116, 104, 140, 121]},
+        {"FieldName": "Amplitude", "FieldIndex": 1, "AREA": [116, 121, 146, 138]}
       ]
     },
     {
       "type": "R",
       "name": "R1",
-      "attributes": {
-        "PORTS": "{150,100}",
-        "DIRECTION": 0,
-        "Resistance": 100,
-        "CurrentFlag": 1
-      },
+      "attributes": {"PORTS": "{150,100}", "DIRECTION": 0, "Resistance": 100, "CurrentFlag": 1},
       "textlinks": [
-        {
-          "FieldName": "Name",
-          "FieldIndex": 0,
-          "AREA": [
-            160,
-            66,
-            200,
-            83
-          ]
-        },
-        {
-          "FieldName": "Resistance",
-          "FieldIndex": 1,
-          "AREA": [
-            160,
-            83,
-            210,
-            100
-          ]
-        }
+        {"FieldName": "Name", "FieldIndex": 0, "AREA": [160, 55, 190, 72]},
+        {"FieldName": "Resistance", "FieldIndex": 1, "AREA": [160, 72, 195, 89]}
       ]
     },
     {
       "type": "C",
       "name": "C1",
-      "attributes": {
-        "PORTS": "{250,100}",
-        "DIRECTION": 90,
-        "Capacitance": 1e-06,
-        "CurrentFlag": 1
-      },
+      "attributes": {"PORTS": "{250,100}", "DIRECTION": 90, "Capacitance": "1u", "CurrentFlag": 1},
       "textlinks": [
-        {
-          "FieldName": "Name",
-          "FieldIndex": 0,
-          "AREA": [
-            267,
-            104,
-            307,
-            121
-          ]
-        },
-        {
-          "FieldName": "Capacitance",
-          "FieldIndex": 1,
-          "AREA": [
-            267,
-            122,
-            320,
-            139
-          ]
-        }
+        {"FieldName": "Name", "FieldIndex": 0, "AREA": [266, 108, 296, 125]},
+        {"FieldName": "Capacitance", "FieldIndex": 1, "AREA": [266, 125, 296, 142]}
       ]
     },
     {
       "type": "Ground",
       "name": "GND",
-      "attributes": {
-        "PORTS": "{100,150}",
-        "DIRECTION": 0
-      }
+      "attributes": {"PORTS": "{100,150}", "DIRECTION": 0}
     },
     {
       "type": "VP",
       "name": "Vout",
-      "attributes": {
-        "PORTS": "{250,100}",
-        "DIRECTION": 0
-      },
+      "attributes": {"PORTS": "{250,100}", "DIRECTION": 0},
       "textlinks": [
-        {
-          "FieldName": "Name",
-          "FieldIndex": 0,
-          "AREA": [
-            235,
-            58,
-            295,
-            75
-          ]
-        }
+        {"FieldName": "Name", "FieldIndex": 0, "AREA": [266, 72, 306, 89]}
       ]
     },
     {
       "type": "VP",
       "name": "Vin",
-      "attributes": {
-        "PORTS": "{100,100}",
-        "DIRECTION": 0
-      },
+      "attributes": {"PORTS": "{100,100}", "DIRECTION": 0},
       "textlinks": [
-        {
-          "FieldName": "Name",
-          "FieldIndex": 0,
-          "AREA": [
-            80,
-            58,
-            120,
-            75
-          ]
-        }
+        {"FieldName": "Name", "FieldIndex": 0, "AREA": [116, 72, 146, 89]}
       ]
     },
     {
       "type": "WIRE",
       "name": "",
-      "attributes": {
-        "X1": 100,
-        "Y1": 100,
-        "X2": 150,
-        "Y2": 100
-      }
+      "attributes": {"X1": 100, "Y1": 100, "X2": 150, "Y2": 100}
     },
     {
       "type": "WIRE",
       "name": "",
-      "attributes": {
-        "X1": 200,
-        "Y1": 100,
-        "X2": 250,
-        "Y2": 100
-      }
+      "attributes": {"X1": 200, "Y1": 100, "X2": 250, "Y2": 100}
     },
     {
       "type": "WIRE",
       "name": "",
-      "attributes": {
-        "X1": 100,
-        "Y1": 150,
-        "X2": 250,
-        "Y2": 150
-      }
+      "attributes": {"X1": 100, "Y1": 150, "X2": 250, "Y2": 150}
     }
   ]
 }

@@ -1,12 +1,19 @@
-"""合并重合的同色同线宽直线，保留真实分支点，避免在线段中堆叠圆点。"""
+"""合并重合的同色同线宽直线，在真实分支点和引脚热端处分段，只在 T 形分支放连接点。"""
 from collections import defaultdict
 from copy import deepcopy
 
 
 def tidy(records):
     groups=defaultdict(list)
-    segments=[];vertices=set();junctions=set()
+    segments=[];vertices=set();junctions=set();pins={}
     for row in records:
+        if row.get('RECORD')=='2':
+            # 引脚从热端指向器件本体；作为一个分支方向参与连接点判断。
+            direction=int(row['PINCONGLOMERATE'])&3
+            dx,dy=((1,0),(0,1),(-1,0),(0,-1))[direction]
+            length=float(row.get('PINLENGTH',0))
+            hot=(round(float(row['LOCATION.X'])+dx*length),round(float(row['LOCATION.Y'])+dy*length))
+            pins.setdefault(hot,set()).add(('L','D','R','U')[direction])
         if row.get('RECORD')=='29':
             junctions.add((int(row['LOCATION.X']),int(row['LOCATION.Y'])))
         if row.get('RECORD')!='27':continue
@@ -19,8 +26,8 @@ def tidy(records):
             if a[1]==b[1]:key=('H',a[1],row.get('LINEWIDTH','1'),row.get('COLOR','8388608'));interval=sorted((a[0],b[0]))
             else:key=('V',a[0],row.get('LINEWIDTH','1'),row.get('COLOR','8388608'));interval=sorted((a[1],b[1]))
             groups[key].append(interval)
-    points=set()
-    for p in vertices|junctions:
+    points=set();pin_cuts=set()
+    for p in vertices|junctions|set(pins):
         dirs=set()
         px,py=p
         for a,b in segments:
@@ -30,6 +37,9 @@ def tidy(records):
             elif a[0]==b[0]==px and min(a[1],b[1])<=py<=max(a[1],b[1]):
                 if min(a[1],b[1])<py:dirs.add('D')
                 if max(a[1],b[1])>py:dirs.add('U')
+        if p in pins and dirs:
+            # 导线在热端处保持端点，AD 直接按端点连接，不依赖热端落在线段中段。
+            pin_cuts.add(p);dirs|=pins[p]
         if len(dirs)>=3:points.add(p)
     kept=[i for i,r in enumerate(records)if r.get('RECORD')not in('27','29')]
     mapping={old:new for new,old in enumerate(kept)}
@@ -47,7 +57,7 @@ def tidy(records):
             else:merged.append([start,end])
         for start,end in merged:
             # 在真实分支点分段，使四向交点同时具有导线端点，原生编译可直接识别。
-            cuts=sorted({start,end}|{(x if axis=='H'else y)for x,y in points
+            cuts=sorted({start,end}|{(x if axis=='H'else y)for x,y in points|pin_cuts
                                     if (y if axis=='H'else x)==pos
                                     and start<(x if axis=='H'else y)<end})
             for lo,hi in zip(cuts,cuts[1:]):

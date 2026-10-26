@@ -1,6 +1,5 @@
 """创建基础原生图纸，调用 AD 原生脚本验证、出图或执行受控的本地脚本。"""
 import argparse
-import copy
 import hashlib
 import json
 import os
@@ -17,38 +16,27 @@ HERE=Path(__file__).resolve().parent
 NATIVE=HERE.parent/'references/native'
 
 
-def create(plan, folder):
+def build(plan):
+    """把建模计划转换为内存中的图纸记录，不写文件；create 与排版预检共用。"""
     from ad_document import Sheet, pin_end
     from tidy_wires import tidy
     if plan.get('units')!='10mil':raise ValueError('坐标单位须明确写为 10mil')
-    folder=Path(folder).resolve();folder.mkdir(parents=True,exist_ok=True)
-    name=plan.get('name','Schematic')
-    if not re.fullmatch(r'[\w-]+',name):raise ValueError('name 只接受字母、数字、中文、下划线或短横线')
-    sch=folder/(name+'.SchDoc');project=sch.with_suffix('.PrjPcb')
-    if sch.exists()or project.exists():raise FileExistsError('输出图纸已存在，请使用新的工作目录')
     width,height=plan['canvas']
     if width<=0 or height<=0:raise ValueError('画布尺寸须为正数')
+    grid=plan.get('grid',10);font=plan.get('font',1)
     s=Sheet((width,height));seen=set()
     for part in plan.get('parts',[]):
-        ref=part['ref']
-        if not ref or ref in seen:raise ValueError('重复或空位号：'+ref)
+        ref=part.get('ref')
+        if not isinstance(ref,str)or not ref or ref in seen:raise ValueError(f'重复或空位号：{ref!r}')
         seen.add(ref);kind=part['kind']
         if kind in('R','C','L','Y'):
-            x,y=part['at'];idx=s.passive(ref,part['value'],x,y,vertical=part.get('vertical',False),kind=kind)
             scale=part.get('symbol_scale',.5)
             if scale<=0:raise ValueError('symbol_scale 须为正数')
-            for row in s.records[idx+1:]:
-                if row.get('OWNERINDEX')!=str(idx-1):continue
-                for key,value in list(row.items()):
-                    if key in('LOCATION.X','CORNER.X')or re.fullmatch(r'X\d+',key):
-                        row[key]=str(round(x+(float(value)-x)*scale))
-                    if key in('LOCATION.Y','CORNER.Y')or re.fullmatch(r'Y\d+',key):
-                        row[key]=str(round(y+(float(value)-y)*scale))
-                if row.get('RECORD')=='2':row['PINLENGTH']=str(round(float(row['PINLENGTH'])*scale))
+            x,y=part['at']
             # 文字保持完整字高和行距，不随小符号一起压缩。
-            part=dict(part)
-            part.setdefault('designator_at',[x+10,y+6]if part.get('vertical',False)else[x-10,y+16])
-            part.setdefault('comment_at',[x+10,y-6]if part.get('vertical',False)else[x-10,y+4])
+            idx=s.passive(ref,part['value'],x,y,vertical=part.get('vertical',False),kind=kind,
+                          scale=scale,grid=grid,font=font,
+                          des_pos=part.get('designator_at'),comment_pos=part.get('comment_at'))
         elif kind=='component':
             pins=part['pins'];expected=part.get('expected_pin_count')
             if expected is not None and len(pins)!=expected:raise ValueError('引脚总数不符：'+ref)
@@ -58,21 +46,16 @@ def create(plan, folder):
             idx=s.component(ref,part['value'],part['body'],
                             [(str(p['number']),p.get('name',''),*p['at'],directions[p['direction']],
                               electrical[p.get('electrical','passive')])for p in pins],
-                            des_pos=part.get('designator_at'),comment_pos=part.get('comment_at'))
-            for row in s.records[idx+1:]:
-                if row.get('OWNERINDEX')==str(idx-1)and row.get('RECORD')=='2':
-                    row['PINLENGTH']=str(part.get('pin_length',20))
+                            des_pos=part.get('designator_at'),comment_pos=part.get('comment_at'),
+                            pin_length=part.get('pin_length',20),font=font)
         else:raise ValueError('基础生成器不支持此符号；应使用已核实的原生库或本地脚本：'+kind)
         s.pins[ref]={r['DESIGNATOR']:pin_end(r)for r in s.records[idx+1:]
                      if r.get('OWNERINDEX')==str(idx-1)and r.get('RECORD')=='2'}
-        for row in s.records[idx+1:]:
-            if row.get('OWNERINDEX')!=str(idx-1):continue
-            key='designator_at'if row.get('NAME')=='Designator'else'comment_at'if row.get('NAME')=='Comment'else None
-            if key and key in part:
-                row['LOCATION.X'],row['LOCATION.Y']=(str(round(v))for v in part[key])
     def position(value):
         if isinstance(value,str):
-            ref,num=value.rsplit('.',1);return s.pins[ref][num]
+            ref,_,num=value.rpartition('.')
+            if num not in s.pins.get(ref,{}):raise ValueError(f'引用了不存在的引脚：{value}')
+            return s.pins[ref][num]
         return tuple(value)
     for wire in plan.get('wires',[]):s.wire(*[position(p)for p in wire])
     for label in plan.get('labels',[]):s.label(*position(label['at']),label['name'])
@@ -81,11 +64,31 @@ def create(plan, folder):
         if'orientation'in port:s.records[i]['ORIENTATION']=str(port['orientation'])
     for point in plan.get('junctions',[]):s.junction(position(point))
     if plan.get('border',True):s.rect(20,20,width-20,height-20)
-    for text in plan.get('texts',[]):s.text(*text['at'],text['text'],font=text.get('font',1))
-    s.records=tidy(s.records);s.save(sch)
+    for text in plan.get('texts',[]):s.text(*text['at'],text['text'],font=text.get('font',font))
+    s.records=tidy(s.records)
+    return s
+
+
+def create(plan, folder, allow_layout_errors=False):
+    from check_layout import check_records
+    folder=Path(folder).resolve()
+    name=plan.get('name','Schematic')
+    if not re.fullmatch(r'[\w-]+',name):raise ValueError('name 只接受字母、数字、中文、下划线或短横线')
+    sch=folder/(name+'.SchDoc');project=sch.with_suffix('.PrjPcb')
+    if sch.exists()or project.exists():raise FileExistsError('输出图纸已存在，请使用新的工作目录')
+    s=build(plan)
+    layout,_,_=check_records(s.records,plan.get('pin_map'),grid=plan.get('grid',10))
+    if layout['summary']['errors']and not allow_layout_errors:
+        first='; '.join(f"{f['code']}: {f['message']}"for f in layout['findings']if f['severity']=='error')
+        raise ValueError(f"排版预检有 {layout['summary']['errors']} 项错误，未写出图纸。先运行 check_layout.py 查看并修正：{first[:600]}")
+    folder.mkdir(parents=True,exist_ok=True)
+    s.save(sch)
     project.write_text('[Design]\nVersion=1.0\nHierarchyMode=0\n\n[Document1]\nDocumentPath='+sch.name+'\nAnnotationEnabled=1\nAnnotateScope=All\n',encoding='utf-8-sig')
     if'pin_map'in plan:(folder/'expected.json').write_text(json.dumps({'pin_map':plan['pin_map']},ensure_ascii=False,indent=2),encoding='utf-8')
-    return {'schematic':str(sch),'project':str(project),'parts':len(seen),'native_validation_required':True}
+    (folder/'layout-check.json').write_text(json.dumps(layout,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    return {'schematic':str(sch),'project':str(project),'parts':len(plan.get('parts',[])),
+            'layout_check':dict(layout['summary'],report=str(folder/'layout-check.json')),
+            'native_validation_required':True}
 
 
 def invoke(ad_exe, script, procedure, job, timeout):
@@ -102,6 +105,7 @@ def invoke(ad_exe, script, procedure, job, timeout):
     while time.monotonic()<deadline:
         if status.exists():
             text=status.read_text(encoding='utf-8-sig',errors='replace')
+            if re.search(r'(?m)^Failed=',text):raise RuntimeError('AD 原生脚本报告失败：'+text.strip()[-500:])
             if'Complete'in text:return text
         time.sleep(.25)
     raise TimeoutError('AD 未在时限内写出完成状态；检查原生脚本面板，勿把旧输出当成功')
@@ -153,6 +157,19 @@ def verify(ad_exe, project, folder, timeout, expected=None):
     return result
 
 
+def text_review(raw):
+    """原生 EMF 的文字重叠、越界与压线摘要；只作提示，不能代替逐区审图。"""
+    from review_emf_text import review
+    try:result=review(raw)
+    except (ValueError,struct.error)as error:return {'status':'未能审查：'+str(error)}
+    return {'passed':not(result['overlaps']or result['outside_indices']or result['text_line_conflicts'])
+            and result['coverage_complete_for_text_records'],
+            'text_count':result['text_count'],'overlaps':result['overlaps'][:10],
+            'outside':[result['texts'][i]['text']for i in result['outside_indices']][:10],
+            'text_line_conflicts':[{k:c[k]for k in('text','box','line_count')}for c in result['text_line_conflicts'][:10]],
+            'coverage_complete':result['coverage_complete_for_text_records']}
+
+
 def export(ad_exe, schematic, folder, timeout, dpi):
     folder=Path(folder).resolve();folder.mkdir(parents=True,exist_ok=True)
     schematic=Path(schematic).resolve();job=job_folder();source=job/'source.SchDoc';shutil.copy2(schematic,source)
@@ -167,6 +184,7 @@ def export(ad_exe, schematic, folder, timeout, dpi):
     struct.pack_into('<4i',data,24,*frame)
     name=schematic.stem;emf=folder/(name+'.emf');emf.write_bytes(data)
     result={'emf':str(emf),'native_original':str(job/'native.emf'),'graphics_unchanged':data[:24]==raw[:24]and data[40:]==raw[40:]}
+    result['text_review']=text_review(bytes(data))
     try:
         from PIL import Image
         Image.MAX_IMAGE_PIXELS=None
@@ -184,6 +202,7 @@ def main():
     parser.add_argument('--timeout',type=float,default=120)
     sub=parser.add_subparsers(dest='command',required=True)
     item=sub.add_parser('create');item.add_argument('plan',type=Path);item.add_argument('folder',type=Path)
+    item.add_argument('--allow-layout-errors',action='store_true',help='仅用于调试：排版预检有错误时仍写出图纸')
     item=sub.add_parser('verify');item.add_argument('project',type=Path);item.add_argument('folder',type=Path);item.add_argument('--expected',type=Path)
     item=sub.add_parser('export');item.add_argument('schematic',type=Path);item.add_argument('folder',type=Path);item.add_argument('--dpi',type=int,default=20)
     item=sub.add_parser('run-script');item.add_argument('script',type=Path);item.add_argument('procedure')
@@ -193,7 +212,7 @@ def main():
         if args.report:
             protected=[getattr(args,k,None)for k in ('plan','project','expected','schematic','script')]
             if args.report.resolve()in[p.resolve()for p in protected if p]:raise ValueError('报告不能覆盖输入')
-        if args.command=='create':result=create(json.loads(args.plan.read_text(encoding='utf-8-sig')),args.folder)
+        if args.command=='create':result=create(json.loads(args.plan.read_text(encoding='utf-8-sig')),args.folder,args.allow_layout_errors)
         else:
             if os.name!='nt'or not args.ad_exe:raise ValueError('此操作需要 Windows 与 --ad-exe')
             if args.command=='verify':result=verify(args.ad_exe,args.project,args.folder,args.timeout,args.expected)

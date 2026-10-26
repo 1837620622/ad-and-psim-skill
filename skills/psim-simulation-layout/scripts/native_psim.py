@@ -36,6 +36,16 @@ def inspect(psim, path):
     finally:sch.free()
 
 
+def precheck(plan):
+    """原生创建前的排版预检；只有结构错误才拒绝，近似几何的警告随结果返回。"""
+    from check_layout import check_plan
+    result=check_plan(plan)
+    if result['summary']['errors']:
+        details='; '.join(f"{f['code']}: {f['message']}"for f in result['findings']if f['severity']=='error')
+        raise ValueError('排版预检有错误，未创建模型：'+details[:600])
+    return result
+
+
 def create(psim, plan, target, overwrite=False):
     target=Path(target).resolve()
     if target.suffix.lower()!='.psimsch':raise ValueError('原生模型应使用 .psimsch')
@@ -137,6 +147,19 @@ def to_python(psim, source, target):
     return {'python':str(target),'execute_status':'仅导出，未执行；运行前检查脚本与输出路径'}
 
 
+def text_review(raw):
+    """原生 EMF 的文字重叠、越界与压线摘要；只作提示，不能代替逐区审图。"""
+    from review_emf_text import review
+    try:result=review(raw)
+    except (ValueError,struct.error)as error:return {'status':'未能审查：'+str(error)}
+    return {'passed':not(result['overlaps']or result['outside_indices']or result['text_line_conflicts'])
+            and result['coverage_complete_for_text_records'],
+            'text_count':result['text_count'],'overlaps':result['overlaps'][:10],
+            'outside':[result['texts'][i]['text']for i in result['outside_indices']][:10],
+            'text_line_conflicts':[{k:c[k]for k in('text','box','line_count')}for c in result['text_line_conflicts'][:10]],
+            'coverage_complete':result['coverage_complete_for_text_records']}
+
+
 def export(psim, source, target, dpi=120):
     if sys.platform!='win32':raise RuntimeError('此原生绘图入口需要 Windows GDI')
     target=Path(target).resolve();target.parent.mkdir(parents=True,exist_ok=True)
@@ -184,6 +207,7 @@ def export(psim, source, target, dpi=120):
     target.write_bytes(data)
     result={'emf':str(target),'native_device_bounds':list(bounds),'bytes':len(data),
             'graphics_unchanged':data[:24]==raw[:24] and data[40:]==raw[40:]}
+    result['text_review']=text_review(bytes(data))
     try:
         from PIL import Image,ImageChops
         with Image.open(target)as picture:
@@ -218,11 +242,16 @@ def main():
         if args.report:
             protected=[getattr(args,k,None)for k in ('source','plan','changes','parameters','target')]
             if args.report.resolve()in[p.resolve()for p in protected if p]:raise ValueError('报告不能覆盖输入或工程输出')
+        if args.command=='create':
+            plan=json.loads(args.plan.read_text(encoding='utf-8-sig'))
+            layout=precheck(plan)
         psim=initialize(args.psim_dir)
         if args.command=='version':data={'version':list(psim.get_psim_version()),'name':psim.get_psim_version_name()}
         elif args.command=='inspect':data=inspect(psim,args.source)
         elif args.command=='to-python':data=to_python(psim,args.source,args.target)
-        elif args.command=='create':data=create(psim,json.loads(args.plan.read_text(encoding='utf-8-sig')),args.target,args.overwrite)
+        elif args.command=='create':
+            data={'elements':create(psim,plan,args.target,args.overwrite),
+                  'layout_check':dict(layout['summary'],findings=[f for f in layout['findings']if f['severity']!='info'])}
         elif args.command=='edit':data=edit(psim,args.source,json.loads(args.changes.read_text(encoding='utf-8-sig')),args.target,args.overwrite)
         elif args.command=='simulate':data=simulate(psim,args.source,args.folder,json.loads(args.parameters.read_text(encoding='utf-8-sig'))if args.parameters else{})
         else:

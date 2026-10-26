@@ -1,16 +1,25 @@
 {
   "name": "RC_Filter",
   "units": "10mil",
-  "canvas": [650, 380],
+  "grid": 10,
+  "canvas": [420, 240],
   "parts": [
-    {"kind":"component","ref":"J1","value":"INPUT","body":[100,190,180,260],"expected_pin_count":2,"designator_at":[100,270],"comment_at":[115,242],"pins":[{"number":"1","name":"VIN","at":[180,230],"direction":"right"},{"number":"2","name":"GND","at":[180,210],"direction":"right"}]},
-    {"kind":"R","ref":"R1","value":"10k","at":[300,230]},
-    {"kind":"C","ref":"C1","value":"100nF","at":[380,175],"vertical":true},
-    {"kind":"component","ref":"J2","value":"OUTPUT","body":[470,190,550,260],"expected_pin_count":2,"designator_at":[470,270],"comment_at":[481,242],"pins":[{"number":"1","name":"OUT","at":[470,230],"direction":"left"},{"number":"2","name":"GND","at":[470,210],"direction":"left"}]}
+    {"kind": "component", "ref": "J1", "value": "INPUT", "body": [60, 130, 90, 160], "expected_pin_count": 2,
+     "pins": [{"number": "1", "name": "VIN", "at": [90, 150], "direction": "right"},
+              {"number": "2", "name": "GND", "at": [90, 140], "direction": "right"}]},
+    {"kind": "R", "ref": "R1", "value": "10k", "at": [180, 150]},
+    {"kind": "C", "ref": "C1", "value": "100nF", "at": [240, 120], "vertical": true},
+    {"kind": "component", "ref": "J2", "value": "OUTPUT", "body": [320, 130, 350, 160], "expected_pin_count": 2,
+     "pins": [{"number": "1", "name": "OUT", "at": [320, 150], "direction": "left"},
+              {"number": "2", "name": "GND", "at": [320, 140], "direction": "left"}]}
   ],
-  "wires": [["J1.1","R1.1"],["R1.2","J2.1"],[[380,230],"C1.1"],["J1.2",[200,120],[450,120],"J2.2"],["C1.2",[380,120]]],
-  "labels": [{"name":"VIN","at":[220,230]},{"name":"VOUT","at":[402,230]}],
-  "power_ports": [{"name":"DGND","at":[300,120],"ground":true}],
-  "texts": [{"text":"RC FILTER","at":[270,310],"font":3}],
-  "pin_map": {"J1.1":"VIN","R1.1":"VIN","R1.2":"VOUT","C1.1":"VOUT","J2.1":"VOUT","J1.2":"DGND","C1.2":"DGND","J2.2":"DGND"}
+  "wires": [["J1.1", "R1.1"], ["R1.2", "J2.1"], [[240, 150], "C1.1"]],
+  "labels": [{"name": "VIN", "at": [120, 150]}, {"name": "VOUT", "at": [260, 150]}],
+  "power_ports": [
+    {"name": "DGND", "at": "J1.2", "ground": true},
+    {"name": "DGND", "at": "C1.2", "ground": true},
+    {"name": "DGND", "at": "J2.2", "ground": true}
+  ],
+  "pin_map": {"J1.1": "VIN", "R1.1": "VIN", "R1.2": "VOUT", "C1.1": "VOUT", "J2.1": "VOUT",
+              "J1.2": "DGND", "C1.2": "DGND", "J2.2": "DGND"}
 }

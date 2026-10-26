@@ -19,8 +19,9 @@ This record describes completed checks, not a guarantee for every design. Privat
 - PSIM 自建 RC 电路：创建、改值、保存重开、求解、读回数据和关联文字出图。12 V、200Ω、1µF 的零初值阶跃，2000 个输出点，相对解析解最大绝对偏差约 0.0001483 V。
 - 压缩包 CRC 与解压哈希一致；解压后的 AD 示例原生验证通过，PSIM 复算与原始数据一致。
 - 辅助检查包括非均匀采样积分、RMS、V/I 乘积积分、储能、门极频率、无效 CSV、重复引脚及网名变化。仓库 tests 提供可移植子集，维护者另做既有工程回归。
+- 排版工具的可移植检查覆盖：两项示例计划预检 0 error、0 warning；悬空线端、浮空标号、离栅格热端、隐式短接、不可编码字符等结构错误；文字重叠、穿件导线、四向连接、浮动标题、稀疏图面等版面问题；无源件热端在各缩放比例下对齐栅格；EMF 映射换算与文字压线判断。这些用例使用合成数据，原生导出上的审查结果以本机实测为准。
 
-AD tests covered native creation, compilation, reopening, pin-level connectivity and export of a basic RC example. PSIM tests covered creation, parameter updates, reopening, solving, data readback and linked-label export. Extracted copies were reopened or rerun. Portable numerical and connectivity checks are included under tests.
+Portable layout tests cover clean pre-checks of both example plans, structural errors, visual layout problems, grid-aligned passive pins and EMF text-over-line detection on synthetic data. AD tests covered native creation, compilation, reopening, pin-level connectivity and export of a basic RC example. PSIM tests covered creation, parameter updates, reopening, solving, data readback and linked-label export. Extracted copies were reopened or rerun. Portable numerical and connectivity checks are included under tests.
 
 ## 能力边界 / Limits
 

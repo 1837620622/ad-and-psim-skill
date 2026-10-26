@@ -1,9 +1,8 @@
 ---
 name: psim-simulation-layout
-description: 用自然语言驱动 PSIM 创建和修改可编辑电路，自动排版、运行原生仿真、读回参数与波形并核验结果。用于 PSIM 自动建模、旧图美化、控制芯片、输入负载扫描、稳态步长损耗与波形交付，输出 psimsch、SMV 和必要 SSF。
+description: Build, lay out and simulate editable PSIM circuits (psimsch) from natural language with native element creation, a deterministic layout check, real solver runs, parameter and waveform readback, and power, efficiency and timestep verification. Use for PSIM modeling, tidying schematics, controller ICs, input or load sweeps, steady state and waveform delivery with SMV and SSF files. 用自然语言驱动 PSIM 建模、排版与原生仿真，读回参数和波形并核验结果，输出紧凑规范的电路图。
 license: Proprietary commercial authorization required. See LICENSE.
-metadata:
-  compatibility: Local file and command tools plus image inspection. Native backend requires Windows, working PSIM and its Python API; measurement helper uses Python 3.
+compatibility: Any agent host that gives the model local file, command and image tools. Native backend requires Windows, a licensed PSIM and its bundled Python API; layout checks and waveform measurement need only Python 3.10+.
 ---
 
 # PSIM 建模排版与仿真核验
@@ -23,6 +22,7 @@ metadata:
 
 | 当前任务 | 读取材料 |
 |---|---|
+| 任何排版：栅格、主路分区、文字位置、参数写法和闸门 | [排版硬规则](references/drafting-rules.md)，每次排图前必读 |
 | 执行建模、改值、求解、原生出图与可运行例子 | [执行入口与计划格式](references/execution.md) |
 | 对照官方电路和用户图面 | [专业图例与观察要点](references/professional-gallery.md)，实际查看适用图片 |
 | 创建、改参数、改图或接口校准 | [原生建模与工程排版](references/modeling-and-layout.md) |
@@ -35,11 +35,11 @@ metadata:
 
 1. **先列模型边界。** 把设计值、工程假设、原生模型输入、仿真量和实测量分开；输入、负载、寄生与保护范围有依据。
 2. **校准原生元件。** 查当前库的端口、首端位置、方向、尺寸、参数名与读写返回值。先用小电路验证，再批量搭建。多个坐标不保证能拉伸元件图形。
-3. **按功率流排图。** 输入在左、功率主路在上、输出在右；驱动、采样、控制及反馈就近。隔离两侧回流清楚，不让全局地或测量方式意外跨接隔离。
+3. **按功率流排图。** 输入在左、功率主路在上、输出在右；驱动、采样、控制及反馈就近。隔离两侧回流清楚，不让全局地或测量方式意外跨接隔离。坐标、文字区和间距按[排版硬规则](references/drafting-rules.md)执行，创建前运行 `scripts/check_layout.py` 修到 0 error。
 4. **读回真实属性。** 以类型、名称和正确索引定位元件，保存后重新打开，核对参数、关联文字、网络和库依赖。改变 Vin、负载等以后重新导出，不只更新图上文字。
 5. **分阶段求解。** 先检查启动和明显异常，再确认稳态，随后执行所需输入/负载扫描、阶跃和敏感性验证。已有合格结果保留，新增失败先定位，避免无目的地重复全工况。
 6. **验证时间与物理。** 实测原生门极或振荡波形的频率；记录设定积分步长、实际采用步长和输出采样间隔。检查步长收敛、整周期统计、储能变化与功率平衡。
-7. **真实出图。** 图纸来自完整原生模型，波形来自实际求解。查看全图、局部与结果窗口后修订。需要截图时用真实软件窗口，不能伪造界面。
+7. **真实出图。** 图纸来自完整原生模型，波形来自实际求解。`export` 结果中的 `text_review` 须为通过，再查看全图、局部与结果窗口后修订。需要截图时用真实软件窗口，不能伪造界面。
 8. **复算与交付。** 保存模型、必要参数和依赖、原始 SMV、必要 SSF 和统计窗口；按用户清单打包，解压检查并在实际软件版本中重新打开、适当复算。
 
 ## 核心取舍
@@ -54,6 +54,8 @@ metadata:
 ## 辅助测量工具
 
 `scripts/native_psim.py` 提供版本、原生属性检查、创建、改值、求解、原生图纸导出和本机 Python 转换入口。复杂版式可从原生导出脚本校准几何后重建副本，不以绘图程序伪造电路。完整命令与局限见执行文档。
+
+`scripts/check_layout.py` 在调用 PSIM 前检查计划：导线正交与栅格、关联文字重叠、文字压到符号或导线、仿真控制位置、字号统一和参数写法；`create` 自动运行它。`scripts/review_emf_text.py` 审查原生 EMF 的文字重叠、越界和压线，`export` 自动附带摘要。
 
 `scripts/analyze_waveform.py` 读取原生导出的 CSV，计算按时间加权的均值、RMS、峰峰值、功率、窗口储能变化和门极频率，并报告输出采样间隔。它不运行 PSIM，也不自动认证稳态。
 
