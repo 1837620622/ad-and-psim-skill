@@ -6,13 +6,14 @@ body:
     id: agent
     attributes:
       label: Agent 与宿主版本
-      placeholder: Codex / Claude Code / ZCode / DSH / 其他
+      placeholder: Claude Code / Codex / Gemini CLI / Cursor / Copilot / OpenCode / MCP 客户端 / 其他
     validations:
       required: true
   - type: input
     id: software
     attributes:
-      label: AD 或 PSIM 实际版本
+      label: 操作系统、Python、AD 或 PSIM 版本
+      placeholder: Windows 11 / macOS 15 / Ubuntu 24.04；Python 3.12；AD 26.4.1；PSIM 2026
     validations:
       required: true
   - type: textarea

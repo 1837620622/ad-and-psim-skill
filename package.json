@@ -1,0 +1,28 @@
+{
+  "name": "ad-and-psim-skill",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Altium Designer and PSIM agent skills: native modeling, layout checks, portable rendering, MCP server.",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "传康Kk（万能程序员）",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1837620622/ad-and-psim-skill.git"
+  },
+  "type": "module",
+  "bin": {
+    "ad-and-psim-skill": "bin/cli.mjs"
+  },
+  "files": [
+    "bin/",
+    "skills/",
+    "scripts/",
+    "README.md",
+    "README.en.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

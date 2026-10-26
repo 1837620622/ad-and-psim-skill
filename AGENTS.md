@@ -1,29 +1,28 @@
 # AD and PSIM Skill
 
-本项目将自然语言任务落实为原生建模、排版、仿真和可编辑工程。AD 任务先读 skills/ad-schematic-layout/SKILL.md，PSIM 任务先读 skills/psim-simulation-layout/SKILL.md。具体任务范围以当前用户要求为准。
+把自然语言需求做成可编辑的 AD 原理图和 PSIM 仿真模型。处理 AD 任务先读 `skills/ad-schematic-layout/SKILL.md`，PSIM 任务先读 `skills/psim-simulation-layout/SKILL.md`，两者都要读各自的 `references/drafting-rules.md`。任务范围以当前用户要求为准。
 
 ## 维护约定
 
-| 维度 | 约定 |
-| --- | --- |
-| 内容 | 维护两项技能、原生执行工具、中英文说明与公开示例 |
-| 步骤 | 读现有实现，确认真实接口，修改后运行适当检查并查看实际输出 |
-| 时间 | 按资料核对、修改、验证和交付推进，避免无目的重复测试 |
-| 结果 | 可运行工具、准确文档、可编辑电路与真实数据 |
-| 评估 | 范围、网络、图面、物理结果和交付分别核验，不扩大实测结论 |
+- 每个技能目录自成一体：脚本只引用同目录的模块，复制到任何 Agent 的技能目录都能运行。
+- 两项技能共用的 `canvas.py`、`capture.py`、`deliver.py`、`mcp_server.py`、`review_emf_text.py` 各放一份相同的副本，改一处就同步另一处；测试会检查两份一致。
+- 脚本只用 Python 3.10+ 标准库，Pillow 可选。代码风格按 `ruff.toml`，提交前运行：
 
-README.md 与 README.en.md 的能力、命令、授权和验证边界应一致。文档使用 UTF-8，不添加日期，不夸大自动化程度，不暗示厂商背书。
+```bash
+ruff format skills scripts tests && ruff check skills scripts tests
+python -m unittest discover -s tests -v
+npx markdownlint-cli2 "**/*.md"
+```
 
-技能主体位于 skills/，发现入口使用目录联接或符号链接，避免维护独立副本。两项技能各带一份相同的 review_emf_text.py，修改时同步，测试会核对两者一致。脚本优先使用标准库；变更执行逻辑时运行相关测试与适当原生验证。
-
-提交前运行 `python -m unittest discover -s tests -v` 与 `npx markdownlint-cli2 "**/*.md"`。示例计划须保持排版预检 0 error、0 warning；修改示例后重新原生导出 docs/images 中的对应图片。
+- 示例计划必须保持预检 0 error、0 warning；改了示例或生成器，在 Windows 上重新原生验证并更新 `docs/VALIDATION.md` 和 `docs/images`。
+- `README.md` 与 `README.en.md` 的功能、命令、授权和验证范围保持一致。文档用 UTF-8，不写日期，不夸大自动化程度，不暗示厂商背书。
 
 ## 原生工程与图面
 
-仅整理布局时保留器件参数和逐端口连接。先查看客户或官方参考，再建立比例、功能分区和局部接线；检查完整导出与关键区域，不能用字框筛查替代实际审图。仿真必须来自实际求解器。
+只改排版时保留器件参数和逐端口连接。先看客户或官方参考，再定比例、分区和局部接线；看完整导出和关键区域，不能用自动检查代替看图。仿真结果必须来自实际求解器。
 
 ## 发布与资料
 
-原始工程和本机参考副本保留，不删除用户资料。_核验、客户材料、references/images 与 references/professional 下的本机副本不进入公开 Git。公开参考使用官方链接；示例图片只使用自建电路。
+用户的原始工程和本机参考副本不删除。`_核验/`、客户材料、`references/images` 与 `references/professional` 下的本机副本不进 Git。公开参考只放官方链接，示例图片只用自建电路。
 
-发布 GitHub 必须有用户明确指令；发布前检查提交身份、许可、链接、语法和待提交清单。项目采用专有商业授权，见 LICENSE；微信 1837620622。不得把第三方内容改称自有或开源许可，不修改全局记忆。
+推送到 GitHub 须有用户明确指示；推送前检查提交身份、授权声明、链接、语法和待提交文件。本项目为专有商业授权，见 LICENSE；微信 1837620622。不要把第三方内容改称自有或开源授权，不修改全局记忆。

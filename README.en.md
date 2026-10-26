@@ -2,138 +2,187 @@
 
 [简体中文](README.md) · **English**
 
-AI engineering skills for Altium Designer and PSIM. An agent with local tools turns natural-language requirements into editable circuits, reference-based layouts, native validation and simulation results.
+Lets an AI coding agent turn a plain-language request into an **editable Altium Designer schematic** or a **PSIM model that really simulates**, with layout at the level of a formal engineering drawing. Works with Claude Code, Codex, Gemini CLI, GitHub Copilot, Cursor, OpenCode and others, and as an MCP server for any MCP client.
 
-**Proprietary commercial project; not free or open source.** See [LICENSE](LICENSE) for authorization terms. WeChat: **1837620622**.
+> **Proprietary commercial project, not open source.** Use, modification and integration require written authorization; see [LICENSE](LICENSE). WeChat: **1837620622**.
 
-## Capabilities
+| AD example (portable render) | PSIM example (portable render) |
+| --- | --- |
+| ![AD RC example](docs/images/ad-rc-render.png) | ![PSIM RC example](docs/images/psim-rc-render.png) |
 
-| Skill | Main tasks | Native outputs and tools |
+Both images come from this package's portable renderer, with no AD or PSIM installed. Native exports and validation records are in [docs/VALIDATION.md](docs/VALIDATION.md).
+
+## What it does
+
+| | AD schematics | PSIM simulation |
 | --- | --- | --- |
-| [AD modeling and schematic layout](skills/ad-schematic-layout/SKILL.md) | Create basic schematics, arrange existing circuits against a customer reference, compile in AD, compare pin-level connectivity and export drawings | SchDoc, PrjPcb, EMF/PNG; `native_ad.py` |
-| [PSIM modeling, layout and simulation](skills/psim-simulation-layout/SKILL.md) | Create and modify native circuits, adjust layout and linked labels, run the solver and read actual parameters and waveforms | psimsch, SMV, CSV, EMF/PNG; `native_psim.py` |
-| Layout and engineering checks | Pre-native layout check, netlist prediction under AD connection rules, text overlap and text-over-line review of native exports, connectivity comparison and time-weighted waveform measurements | Check reports and draft previews, netlist differences, review records and measurements; `check_layout.py`, `review_emf_text.py` |
+| Modeling | Writes SchDoc + PrjPcb, byte-identical on every OS | Builds a Windows kit; PSIM writes the psimsch |
+| Editing existing work | Import SchDoc → apply edit operations → regenerate; wires re-route orthogonally | Edit the plan; moved elements drag their wires around symbols |
+| Layout check | Grid, dangling wires, implicit shorts, predicted netlist, text overlap and text over lines, wires through parts, sheet density, value notation | Wires, grid, text overlap and text over lines, wires through symbols, simulation-control placement, value notation |
+| Preview | Portable render that closely matches the native AD export (PNG/SVG) | PSIM-style portable render (PNG/SVG) |
+| Native (Windows) | Compile, pin-level netlist comparison, native export, window screenshot | Create, edit parameters, solve, read back waveforms, native export, window screenshot |
+| Result checks | Text overlap, clipping and text-over-line review on the native EMF | Same, plus time-weighted power, efficiency, RMS and gate-frequency measurements |
+| Delivery | Customer folder holds only the project and drawings; process files go to an archive; no zip | Customer folder holds only the model and results; process files go to an archive |
 
-The agent interprets the task, checks models, plans the layout and invokes the tools. This package supplies execution helpers and engineering methods. Complex devices, controller models and design targets still require project-specific verification. AD schematic compilation and PSIM circuit simulation are separate checks.
+## Works on Windows, macOS and Linux
 
-## Workflow and layout
+AD and PSIM run only on Windows. Everything that does not need the software is plain Python 3.10+ using only the standard library:
 
-1. Read the current requirements, source project and reference drawings; define the scope and deliverables.
-2. Check software versions, native libraries, pins, parameters, coordinates and export behavior; validate a representative section first.
-3. Build an editable circuit. Follow power or signal flow and keep supplies, clocks, sensing, compensation and feedback near the relevant devices.
-4. Run the layout check until it reports 0 errors. `create` refuses to write a drawing that fails the check.
-5. Save and reopen the native project. Compile and compare connectivity in AD; run the required operating conditions and read results in PSIM.
-6. Native exports include a review of text overlap, clipping and text crossed by lines. Inspect the complete export and critical details, correct spacing, alignment, blank areas and clipping, then recheck electrical relationships.
-7. Deliver the agreed files. Check archive CRC, extracted file hashes and native reopening.
+| Task | Windows | macOS / Linux |
+| --- | --- | --- |
+| Plan, layout check, portable render, plan editing | ✓ | ✓ |
+| AD: write SchDoc + PrjPcb | ✓ | ✓ (identical to files written on Windows) |
+| PSIM: build kit | ✓ | ✓ (copy to a Windows PC with PSIM and double-click `build.bat`) |
+| AD compile/export, PSIM create/solve, window screenshots | ✓ (with the software) | Hand over to a Windows PC with the software |
+| Waveform measurement, delivery | ✓ | ✓ |
 
-Use conventional engineering drafting: a consistent grid, orthogonal local wiring, clear junctions and linked component text. Avoid arbitrary component matrices, decorative panels and excessive blank space. Grid, text placement, spacing, proportions and value notation are specified numerically in the [AD drafting rules](skills/ad-schematic-layout/references/drafting-rules.md) and [PSIM drafting rules](skills/psim-simulation-layout/references/drafting-rules.md). Layout-only changes preserve component parameters and port-level connectivity. Single-sheet or single-symbol requirements apply when requested for the current task.
+AD drawings made on a Mac can go straight to the customer. A psimsch is a proprietary binary format, so on a Mac you build a kit and the customer's or colleague's PSIM writes the native file, giving the same result as modeling on Windows.
 
-See the [AD reference notes](skills/ad-schematic-layout/references/professional-gallery.md) and [PSIM reference notes](skills/psim-simulation-layout/references/professional-gallery.md). The public repository links to official sources and provides original guidance; it does not distribute customer screenshots or copies of vendor manuals.
+## Install
 
-## Requirements and installation
+Install [Python 3.10+](https://www.python.org/downloads/) first. PNG rendering and screenshot conversion need Pillow: `python -m pip install -r requirements-optional.txt`.
 
-- An agent that can read local files, execute commands and inspect images.
-- Windows with a working, appropriately licensed installation of AD or PSIM. PSIM also requires the Python API supplied with the application.
-- Python 3.10 or later. Basic creation and measurement helpers mainly use the standard library. Pillow is optional for PNG rendering; olefile is optional for auxiliary reading of existing SchDoc files.
-- Both skills follow the SKILL.md structure. Host-specific discovery is documented in [COMPATIBILITY.md](COMPATIBILITY.md).
+### Option 1: npx (recommended, Node 18+)
 
-The following commands are for users who have obtained the required authorization:
+```bash
+npx -y github:1837620622/ad-and-psim-skill install            # into ~/.agents/skills and ~/.claude/skills
+npx -y github:1837620622/ad-and-psim-skill install --all      # into every known agent directory
+npx -y github:1837620622/ad-and-psim-skill doctor             # check Python, Pillow, AD, PSIM
+```
 
-```powershell
+### Option 2: Skills CLI
+
+```bash
+npx skills add 1837620622/ad-and-psim-skill
+```
+
+### Option 3: CC Switch
+
+In CC Switch, open Skills → Repository management → Add repository and enter Owner `1837620622`, Name `ad-and-psim-skill`, Branch `main`, Subdirectory `skills`, then install both skills. Some versions only detect a SKILL.md at the repository root; use option 1 if nothing is found.
+
+### Option 4: clone and install with Python
+
+```bash
 git clone https://github.com/1837620622/ad-and-psim-skill.git
 cd ad-and-psim-skill
-python scripts/install_skills.py --profile common --profile claude --profile zcode
-python scripts/install_skills.py --profile common --profile claude --profile zcode --check
+python scripts/install_skills.py                 # default: ~/.agents/skills and ~/.claude/skills
+python scripts/install_skills.py --agent gemini --agent cursor
+python scripts/install_skills.py --link          # links follow repository updates
 ```
 
-Install only the profiles you need: `common` targets `~/.agents/skills`, which Codex, Gemini CLI, GitHub Copilot, Cursor, OpenCode and DSH all read; `claude` targets Claude Code, and `zcode` targets ZCode. The installer creates directory junctions on Windows and symbolic links elsewhere. Existing directories with different contents are preserved and reported as conflicts. It does not install AD/PSIM or grant software licenses.
+The installers replace only directories they installed; other directories with the same name are kept and reported. `~/.agents/skills` is read by Codex, Gemini CLI, GitHub Copilot, Cursor and OpenCode; Claude Code reads `~/.claude/skills`. See [COMPATIBILITY.md](COMPATIBILITY.md) for every host. Reopen the agent session afterwards.
 
-Install optional dependencies in your own Python environment when needed:
+## Usage
 
-```powershell
-python -m pip install -r requirements-optional.txt
-```
-
-## Natural-language requests
-
-The validated Codex environment discovers these skills with the package prefix shown below. Open a new session or refresh the skill list after installation. Use the names actually reported by other hosts.
-
-**AD modeling and layout:**
+### Ask in plain language
 
 ```text
-Use $ad-and-psim-skill:ad-schematic-layout to read my specification and reference.
-Include only the required hardware. For this task, use one editable sheet and one complete DSP symbol.
-Match the placement, typography and local wiring. Compile, compare connectivity and inspect each section before delivery.
+Use ad-schematic-layout to draw an editable DSP minimum-system schematic from the attached
+specification and reference. Include only the required hardware and one complete DSP symbol.
+After the layout check passes, compile and export on Windows and prepare the delivery folders.
 ```
-
-**PSIM modeling and simulation:**
 
 ```text
-Use $ad-and-psim-skill:psim-simulation-layout for the specified topology, ratings and controller.
-Place the power stage above the nearby control and feedback circuits. Run startup, rated operation and required steps.
-Check frequency, steady state, time resolution and power balance. Deliver the editable model, actual waveforms and drawings.
+Use psim-simulation-layout to build a flyback converter with the given topology and ratings,
+power stage on top, control and feedback below. Run startup, rated load and a load step; check
+switching frequency, steady state, time step and power balance; deliver the model and real waveforms.
 ```
-
-**Layout-only changes:**
 
 ```text
-Rearrange the existing circuit to follow the attached reference.
-Preserve devices, parameters and port-level connectivity.
-Reopen natively, compare connectivity and properties, then inspect the complete export and critical details.
+Import work/old.SchDoc and change only the layout, keeping parts, values and connections.
+After the check passes, generate the new drawing and show me a render.
 ```
 
-The skills do not depend on a model vendor: Claude, GPT, Gemini, Grok, DeepSeek, Qwen and others work when the host supplies local file, command and image tools. A chat model alone cannot operate desktop software. Layout quality is decided by numeric rules and automatic checks rather than model taste; see [COMPATIBILITY.md](COMPATIBILITY.md). A host can also load the relevant SKILL.md explicitly and resolve its references and scripts relative to that directory.
+### Command line
 
-## Runnable basic examples
-
-From the repository root, run the layout check with a draft preview, then create the basic AD RC schematic. Neither step needs AD, so both run on any system:
-
-```powershell
-python skills/ad-schematic-layout/scripts/check_layout.py skills/ad-schematic-layout/assets/rc-filter-plan.json --preview work/draft.png
+```bash
+# AD, any OS
+python skills/ad-schematic-layout/scripts/native_ad.py check skills/ad-schematic-layout/assets/rc-filter-plan.json --preview work/draft.png
 python skills/ad-schematic-layout/scripts/native_ad.py create skills/ad-schematic-layout/assets/rc-filter-plan.json work/ad
+python skills/ad-schematic-layout/scripts/native_ad.py render work/ad/RC_Filter.SchDoc work/ad/view.png
+
+# PSIM: build the kit anywhere, double-click build.bat on Windows
+python skills/psim-simulation-layout/scripts/native_psim.py check skills/psim-simulation-layout/assets/rc-filter-plan.json
+python skills/psim-simulation-layout/scripts/native_psim.py package skills/psim-simulation-layout/assets/rc-filter-plan.json work/psim-kit
 ```
 
-For PSIM, set the actual installation directory, then create, simulate and export:
+All commands: [AD commands](skills/ad-schematic-layout/references/commands.md), [PSIM commands](skills/psim-simulation-layout/references/commands.md).
 
-```powershell
-$psimDir = "C:\Path\To\PSIM"
-python skills/psim-simulation-layout/scripts/check_layout.py skills/psim-simulation-layout/assets/rc-filter-plan.json
-python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir" version
-python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir" create skills/psim-simulation-layout/assets/rc-filter-plan.json work/psim/RC_Filter.psimsch
-python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir" simulate work/psim/RC_Filter.psimsch work/psim-result
-python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir" export work/psim/RC_Filter.psimsch work/psim-preview/circuit.emf
+### MCP
+
+The MCP server uses only the Python standard library and exposes 23 tools (`ad_*` and `psim_*`) to read, edit, check and render the current drawing.
+
+```bash
+claude mcp add ad-psim -- npx -y github:1837620622/ad-and-psim-skill mcp    # Claude Code
 ```
 
-Replace the example installation path with your actual directory. Use fresh output paths to avoid mixing old and new results. See the [AD execution guide](skills/ad-schematic-layout/references/execution.md) and [PSIM execution guide](skills/psim-simulation-layout/references/execution.md) for native compilation, export, parameter editing, linked text and plan formats.
+Clients that use `mcpServers`, such as Cursor (`~/.cursor/mcp.json`) and Gemini CLI (`~/.gemini/settings.json`):
 
-These native exports are from self-contained RC examples. They demonstrate file generation and linked labels; complex circuit layouts require their own review.
-
-**Complete native AD export** (open the image to inspect pins and labels):
-
-![Native export of the basic AD RC schematic](docs/images/ad-native-rc.png)
-
-**Native PSIM export** (blank margins cropped for reading):
-
-![Native export of the basic PSIM RC schematic](docs/images/psim-native-rc.png)
-
-## Validation and limits
-
-The validation environment used AD Enterprise 26.4.1, PSIM 2026.0.0.7209 and Python 3.12. Checks covered AD creation, compilation, pin-level connectivity and native export; PSIM creation, parameter updates, saving, reopening, solving and linked-label export; and reopening or rerunning extracted copies.
-
-The basic AD example compiled with 0 errors and 4 warnings. This is not a zero-warning or manufacturing approval claim. The 12 V PSIM RC validation differed from the analytical response by at most about 0.00015 V. That test does not cover every topology or controller model. See [validation details](docs/VALIDATION.md).
-
-Run the portable helper checks with:
-
-```powershell
-python -m unittest discover -s tests -v
+```json
+{
+  "mcpServers": {
+    "ad-psim": { "command": "npx", "args": ["-y", "github:1837620622/ad-and-psim-skill", "mcp"] }
+  }
+}
 ```
 
-Actual Codex skill discovery was checked. Claude Code, Gemini CLI, GitHub Copilot, Cursor, OpenCode, ZCode and DSH have adapters for their documented discovery directories, but a complete design task was not run in each host. Grok and other models depend on their host integration. The native Windows backends have not been directly validated on macOS or Linux.
+Codex (`~/.codex/config.toml`):
 
-## Authorization, contact and issues
+```toml
+[mcp_servers.ad-psim]
+command = "npx"
+args = ["-y", "github:1837620622/ad-and-psim-skill", "mcp"]
+```
 
-This is a **publicly visible proprietary commercial project**, without a default free-use or trial license. Rights granted by applicable law or platform terms, including permitted viewing and forking, are preserved. Other use, modification, integration and redistribution are governed by [LICENSE](LICENSE) and a separate written authorization. Sponsorship alone does not grant commercial rights.
+Without Node, use `python` as the command with `["<repo>/skills/ad-schematic-layout/scripts/mcp_server.py", "--with", "<repo>/skills/psim-simulation-layout/scripts"]` as arguments.
 
-- WeChat: **1837620622（传康Kk）**. Only sponsorship, commercial cooperation and licensing inquiries are accepted.
-- Problems: [open an Issue](https://github.com/1837620622/ad-and-psim-skill/issues/new/choose) with software/agent versions, reproduction steps and relevant logs. Do not submit credentials or confidential customer projects.
-- Product and vendor names identify compatibility targets and sources only. No official affiliation, certification or endorsement is implied. See [third-party notices](THIRD_PARTY_NOTICES.md).
+## Layout standard
+
+"Looks good" is written down as numbers and decided by code, not by the model's taste:
+
+1. **Plan check**: grid, connections, text spacing, proportions, density and value notation. Files are written only with 0 errors.
+2. **Native connectivity** (AD) or **native solve** (PSIM).
+3. **Native drawing**: text overlap, clipping and text crossed by lines on the native EMF, then a visual review.
+
+Full rules: [AD drafting rules](skills/ad-schematic-layout/references/drafting-rules.md), [PSIM drafting rules](skills/psim-simulation-layout/references/drafting-rules.md) (in Chinese).
+
+## Screenshots
+
+On Windows with the software installed, `screenshot` opens AD or PSIM, waits for the document, maximizes the window and captures it. Without the software it falls back to the portable render and labels the result `portable_render`. Renders are for debugging; use native exports or real screenshots for anything you hand out.
+
+## Delivery
+
+```bash
+python skills/ad-schematic-layout/scripts/native_ad.py deliver work/ delivery/ --name ProjectName
+```
+
+This creates `delivery/ProjectName/` for the customer, containing only project files, simulation results and final drawings, and `delivery/ProjectName-archive/` for you, with plans, scripts, reports, drafts and a SHA-256 manifest. No zip is produced, and files in the work folder are copied, never moved.
+
+## Layout of the repository
+
+```text
+ad-and-psim-skill/
+├── skills/
+│   ├── ad-schematic-layout/       # AD skill: SKILL.md, references/, scripts/, assets/
+│   └── psim-simulation-layout/    # PSIM skill: same structure
+├── bin/cli.mjs                    # npx entry: install / mcp / doctor
+├── scripts/install_skills.py      # Python installer
+├── tests/                         # portable tests (no AD or PSIM needed)
+└── docs/                          # validation record and example images
+```
+
+Each skill directory is self-contained and works when copied into any agent's skill directory.
+
+## Validation
+
+- The portable parts (checks, generation, import and editing, rendering, build kit, MCP, installers) have automated tests run on Linux with Python 3.10 and 3.13: `python -m unittest discover -s tests -v`.
+- The native parts were validated with AD Enterprise 26.4.1 and PSIM 2026.0.0.7209; records, limits and pending re-checks are in [docs/VALIDATION.md](docs/VALIDATION.md).
+- Codex skill discovery was checked in practice; other hosts use the directories from their official documentation and were not each run through a full design task.
+
+## License and contact
+
+The source is public but this is **not open-source software**, and there is no default free-use or trial license. Viewing and forking allowed by law and platform terms are unaffected; other use, modification, integration and redistribution require written authorization under [LICENSE](LICENSE). Sponsorship alone grants no license.
+
+- WeChat: **1837620622**, for sponsorship, commercial cooperation and licensing only.
+- Problems: [open an issue](https://github.com/1837620622/ad-and-psim-skill/issues/new/choose) with software and agent versions, steps and logs. Do not upload credentials or confidential customer projects.
+- Product names identify compatibility targets only and imply no affiliation or endorsement; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

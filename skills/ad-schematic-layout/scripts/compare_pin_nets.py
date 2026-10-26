@@ -1,4 +1,5 @@
 """按物理引脚的同网伙伴比较拓扑，不依赖自动生成网名。"""
+
 import argparse
 import csv
 import json
@@ -31,13 +32,16 @@ def load_pin_map(path):
         pins[pin] = net
 
     if content.lstrip().startswith('{'):
+
         def unique_pairs(pairs):
-            result={}
-            for key,value in pairs:
-                if key in result:raise ValueError('JSON 重复字段：'+key)
-                result[key]=value
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError('JSON 重复字段：' + key)
+                result[key] = value
             return result
-        data = json.loads(content,object_pairs_hook=unique_pairs)
+
+        data = json.loads(content, object_pairs_hook=unique_pairs)
         if not isinstance(data, dict) or not isinstance(data.get('pin_map'), dict):
             raise ValueError('JSON 须含 pin_map 对象：物理引脚 -> 网络名')
         for pin, net in data['pin_map'].items():
@@ -73,12 +77,21 @@ def compare(expected, actual):
     changed = []
     for pin in sorted(left.keys() & right.keys()):
         if left[pin] != right[pin]:
-            changed.append({'pin': pin,
-                            'expected_only_members': sorted(left[pin] - right[pin]),
-                            'actual_only_members': sorted(right[pin] - left[pin])})
-    return {'match': not (missing or added or changed), 'expected_pin_count': len(left),
-            'actual_pin_count': len(right), 'missing_pins': missing, 'added_pins': added,
-            'changed_pins': changed}
+            changed.append(
+                {
+                    'pin': pin,
+                    'expected_only_members': sorted(left[pin] - right[pin]),
+                    'actual_only_members': sorted(right[pin] - left[pin]),
+                }
+            )
+    return {
+        'match': not (missing or added or changed),
+        'expected_pin_count': len(left),
+        'actual_pin_count': len(right),
+        'missing_pins': missing,
+        'added_pins': added,
+        'changed_pins': changed,
+    }
 
 
 def main():

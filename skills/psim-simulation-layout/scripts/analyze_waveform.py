@@ -1,4 +1,5 @@
 """测量原生导出的 CSV；时间加权统计不等于自动确认稳态或内部求解步长。"""
+
 import argparse
 from array import array
 from bisect import bisect_left, bisect_right
@@ -90,20 +91,26 @@ def clip(times, data, start, end):
 
 def moments(times, values):
     duration = times[-1] - times[0]
-    integral = math.fsum((b - a) * (x + y) / 2
-                         for a, b, x, y in zip(times, times[1:], values, values[1:]))
-    square = math.fsum((b - a) * (x*x + x*y + y*y) / 3
-                       for a, b, x, y in zip(times, times[1:], values, values[1:]))
+    integral = math.fsum((b - a) * (x + y) / 2 for a, b, x, y in zip(times, times[1:], values, values[1:]))
+    square = math.fsum(
+        (b - a) * (x * x + x * y + y * y) / 3 for a, b, x, y in zip(times, times[1:], values, values[1:])
+    )
     low, high = min(values), max(values)
-    return {'mean': integral / duration, 'rms': math.sqrt(max(0., square / duration)),
-            'min': low, 'max': high, 'peak_to_peak': high - low}
+    return {
+        'mean': integral / duration,
+        'rms': math.sqrt(max(0.0, square / duration)),
+        'min': low,
+        'max': high,
+        'peak_to_peak': high - low,
+    }
 
 
 def mean_product(times, left, right):
     # 两条线性插值曲线的乘积为二次式，按段积分而非均值相乘。
-    integral = math.fsum((b - a) * (2*x0*y0 + x0*y1 + x1*y0 + 2*x1*y1) / 6
-                         for a, b, x0, x1, y0, y1 in
-                         zip(times, times[1:], left, left[1:], right, right[1:]))
+    integral = math.fsum(
+        (b - a) * (2 * x0 * y0 + x0 * y1 + x1 * y0 + 2 * x1 * y1) / 6
+        for a, b, x0, x1, y0, y1 in zip(times, times[1:], left, left[1:], right, right[1:])
+    )
     return integral / (times[-1] - times[0])
 
 
@@ -115,16 +122,38 @@ def gate_frequency(times, values, threshold):
     if len(edges) < 3:
         return {'status': 'insufficient_rising_edges', 'edge_count': len(edges)}
     periods = [b - a for a, b in zip(edges, edges[1:])]
-    return {'status': 'measured', 'edge_count': len(edges),
-            'average_hz': (len(edges) - 1) / (edges[-1] - edges[0]),
-            'median_period_hz': 1 / statistics.median(periods),
-            'min_cycle_hz': 1 / max(periods), 'max_cycle_hz': 1 / min(periods),
-            'method': '原始输出点之间线性插值的阈值上升沿；不能恢复采样漏掉的脉冲。'}
+    return {
+        'status': 'measured',
+        'edge_count': len(edges),
+        'average_hz': (len(edges) - 1) / (edges[-1] - edges[0]),
+        'median_period_hz': 1 / statistics.median(periods),
+        'min_cycle_hz': 1 / max(periods),
+        'max_cycle_hz': 1 / min(periods),
+        'method': '原始输出点之间线性插值的阈值上升沿；不能恢复采样漏掉的脉冲。',
+    }
 
 
-def measure(times, data, *, pin=None, pout=None, vin=None, iin=None, vout=None, iout=None,
-            start=None, end=None, fundamental=None, cycles=None, steady=False,
-            gate=None, threshold=.5, capacitors=(), inductors=(), ac_input=False):
+def measure(
+    times,
+    data,
+    *,
+    pin=None,
+    pout=None,
+    vin=None,
+    iin=None,
+    vout=None,
+    iout=None,
+    start=None,
+    end=None,
+    fundamental=None,
+    cycles=None,
+    steady=False,
+    gate=None,
+    threshold=0.5,
+    capacitors=(),
+    inductors=(),
+    ac_input=False,
+):
     if any(not math.isfinite(t) for t in times) or len(times) < 2 or any(b <= a for a, b in zip(times, times[1:])):
         raise ValueError('时间须为严格递增的有限序列')
     if any(len(values) != len(times) or any(not math.isfinite(v) for v in values) for values in data.values()):
@@ -159,8 +188,12 @@ def measure(times, data, *, pin=None, pout=None, vin=None, iin=None, vout=None, 
         raise ValueError(f'缺少功率计算信号：{error.args[0]}') from error
     duration = finish - begin
     intervals = [b - a for a, b in zip(times, times[1:])]
-    sample = {'min_s': min(intervals), 'max_s': max(intervals), 'median_s': statistics.median(intervals),
-              'meaning': '原始输出采样间隔；不是经独立验证的内部求解步长。'}
+    sample = {
+        'min_s': min(intervals),
+        'max_s': max(intervals),
+        'median_s': statistics.median(intervals),
+        'meaning': '原始输出采样间隔；不是经独立验证的内部求解步长。',
+    }
     ratio = 100 * p_out / p_in if p_in > 0 else None
     storage = []
     for kind, terms in (('capacitor', capacitors), ('inductor', inductors)):
@@ -170,18 +203,31 @@ def measure(times, data, *, pin=None, pout=None, vin=None, iin=None, vout=None, 
             if name not in values:
                 raise ValueError(f'缺少储能信号：{name}')
             v = values[name]
-            storage.append({'kind': kind, 'signal': name, 'coefficient_si': coefficient,
-                            'energy_change_J': .5 * coefficient * (v[-1]**2 - v[0]**2)})
+            storage.append(
+                {
+                    'kind': kind,
+                    'signal': name,
+                    'coefficient_si': coefficient,
+                    'energy_change_J': 0.5 * coefficient * (v[-1] ** 2 - v[0] ** 2),
+                }
+            )
     known_energy = math.fsum(term['energy_change_J'] for term in storage)
-    result = {'window_s': [begin, finish], 'duration_s': duration, 'sample_count_in_window': len(t),
-              'output_sampling_interval': sample, 'signals': stats, 'input_power_W': p_in,
-              'output_power_W': p_out, 'power_ratio_percent': ratio,
-              'steady_state_asserted_by_caller': bool(steady),
-              'efficiency_percent': ratio if steady and ratio is not None else None,
-              'known_storage_terms': storage,
-              'known_storage_power_W': known_energy / duration if storage else None,
-              'residual_after_known_storage_W': p_in - p_out - known_energy / duration if storage else None,
-              'limitations': '需核对稳态、参照侧、测量方向、模型损耗与采样收敛；没有自动进行工程验收。'}
+    result = {
+        'window_s': [begin, finish],
+        'duration_s': duration,
+        'sample_count_in_window': len(t),
+        'output_sampling_interval': sample,
+        'signals': stats,
+        'input_power_W': p_in,
+        'output_power_W': p_out,
+        'power_ratio_percent': ratio,
+        'steady_state_asserted_by_caller': bool(steady),
+        'efficiency_percent': ratio if steady and ratio is not None else None,
+        'known_storage_terms': storage,
+        'known_storage_power_W': known_energy / duration if storage else None,
+        'residual_after_known_storage_W': p_in - p_out - known_energy / duration if storage else None,
+        'limitations': '需核对稳态、参照侧、测量方向、模型损耗与采样收敛；没有自动进行工程验收。',
+    }
     if ratio is not None and ratio > 100:
         result['power_ratio_above_100_percent'] = True
     if p_in <= 0:
@@ -190,19 +236,23 @@ def measure(times, data, *, pin=None, pout=None, vin=None, iin=None, vout=None, 
         apparent = stats[vin]['rms'] * stats[iin]['rms']
         result['input_power_over_rms_product'] = p_in / apparent if apparent > 0 else None
         if ac_input:
-            if fundamental is None:raise ValueError('AC 功率因数须指定 fundamental-hz 并核对整周期窗口')
-            count=duration*fundamental
-            if not math.isclose(count,round(count),rel_tol=0,abs_tol=1e-7):raise ValueError('AC 功率因数须使用完整工频周期')
+            if fundamental is None:
+                raise ValueError('AC 功率因数须指定 fundamental-hz 并核对整周期窗口')
+            count = duration * fundamental
+            if not math.isclose(count, round(count), rel_tol=0, abs_tol=1e-7):
+                raise ValueError('AC 功率因数须使用完整工频周期')
             result['input_total_power_factor'] = p_in / apparent if apparent > 0 else None
-    elif ac_input:raise ValueError('AC 功率因数需要 V/I 模式')
+    elif ac_input:
+        raise ValueError('AC 功率因数需要 V/I 模式')
     if gate:
         if not math.isfinite(threshold) or gate not in values:
             raise ValueError('门极信号与有限阈值必须有效')
         result['gate_frequency'] = gate_frequency(t, values[gate], threshold)
     if fundamental is not None and duration + tolerance >= 2 / fundamental:
         period = 1 / fundamental
-        first=finish-2*period
-        if times[0]-tolerance<=first<times[0]:first=times[0]
+        first = finish - 2 * period
+        if times[0] - tolerance <= first < times[0]:
+            first = times[0]
         t1, d1 = clip(times, data, first, finish - period)
         t2, d2 = clip(times, data, finish - period, finish)
         result['last_two_periods'] = {}
@@ -210,9 +260,11 @@ def measure(times, data, *, pin=None, pout=None, vin=None, iin=None, vout=None, 
             a, b = moments(t1, d1[name]), moments(t2, d2[name])
             scale = max(a['rms'], b['rms'], 1e-15)
             result['last_two_periods'][name] = {
-                'previous_mean': a['mean'], 'last_mean': b['mean'],
+                'previous_mean': a['mean'],
+                'last_mean': b['mean'],
                 'mean_change_over_rms_scale': (b['mean'] - a['mean']) / scale,
-                'rms_relative_change': (b['rms'] - a['rms']) / scale}
+                'rms_relative_change': (b['rms'] - a['rms']) / scale,
+            }
     return result
 
 
@@ -239,9 +291,9 @@ def main():
     parser.add_argument('--end', type=float)
     parser.add_argument('--fundamental-hz', type=float)
     parser.add_argument('--cycles', type=int)
-    parser.add_argument('--threshold', type=float, default=.5)
+    parser.add_argument('--threshold', type=float, default=0.5)
     parser.add_argument('--steady', action='store_true')
-    parser.add_argument('--ac-input', action='store_true',help='已确认交流输入；仅在 V/I 整周期窗口计算功率因数')
+    parser.add_argument('--ac-input', action='store_true', help='已确认交流输入；仅在 V/I 整周期窗口计算功率因数')
     parser.add_argument('--capacitor', action='append', type=storage_term, default=[])
     parser.add_argument('--inductor', action='append', type=storage_term, default=[])
     parser.add_argument('--output', type=Path)
@@ -249,15 +301,31 @@ def main():
     try:
         if args.output and args.output.resolve() == args.csv.resolve():
             raise ValueError('输出路径不能覆盖原始 CSV')
-        names = args.signal + [getattr(args, key) for key in ('pin', 'pout', 'vin', 'iin', 'vout', 'iout', 'gate')
-                               if getattr(args, key)]
+        names = args.signal + [
+            getattr(args, key) for key in ('pin', 'pout', 'vin', 'iin', 'vout', 'iout', 'gate') if getattr(args, key)
+        ]
         names += [term[0] for term in args.capacitor + args.inductor]
         times, data, encoding = load_csv(args.csv, names, args.time, args.encoding)
-        result = measure(times, data, pin=args.pin, pout=args.pout, vin=args.vin, iin=args.iin,
-                         vout=args.vout, iout=args.iout, start=args.start, end=args.end,
-                         fundamental=args.fundamental_hz, cycles=args.cycles, steady=args.steady,
-                         gate=args.gate, threshold=args.threshold,
-                         capacitors=args.capacitor, inductors=args.inductor,ac_input=args.ac_input)
+        result = measure(
+            times,
+            data,
+            pin=args.pin,
+            pout=args.pout,
+            vin=args.vin,
+            iin=args.iin,
+            vout=args.vout,
+            iout=args.iout,
+            start=args.start,
+            end=args.end,
+            fundamental=args.fundamental_hz,
+            cycles=args.cycles,
+            steady=args.steady,
+            gate=args.gate,
+            threshold=args.threshold,
+            capacitors=args.capacitor,
+            inductors=args.inductor,
+            ac_input=args.ac_input,
+        )
         result['source'] = str(args.csv.resolve())
         result['encoding'] = encoding
         text = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)

@@ -1,4 +1,4 @@
 interface:
   display_name: "PSIM 建模、排版与仿真"
-  short_description: "控制 PSIM 完成原生电路建模、美观排版、自动仿真和真实结果复核"
-  default_prompt: "使用 $psim-simulation-layout 完成可编辑 PSIM 建模、排版与原生仿真，并核对波形和物理结果。"
+  short_description: "生成 PSIM 模型与构建包，排版预检、便携渲染，在 Windows 上原生求解与出图"
+  default_prompt: "使用 $psim-simulation-layout 完成可编辑的 PSIM 模型，预检通过后原生求解、核对波形与物理量并整理交付。"

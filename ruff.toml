@@ -1,0 +1,18 @@
+line-length = 120
+target-version = "py310"
+
+[lint]
+select = ["E", "W", "F", "B", "UP", "C4", "SIM", "PIE", "RET", "PL"]
+ignore = [
+  "B905",     # zip(a, a[1:]) 等相邻配对有意长度不同
+  "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR0917", "PLR2004",  # 工程脚本的分支、参数和常量数量不做硬限制
+  "PLC0415",  # 可选依赖与平台相关模块按需导入
+  "SIM108",   # 不强制三元表达式
+  "RET505", "RET506",
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["E402"]
+
+[format]
+quote-style = "single"

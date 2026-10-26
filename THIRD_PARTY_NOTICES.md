@@ -9,7 +9,7 @@ This project's proprietary notice covers only original contents for which the ri
 - 公开仓库提供原创技能、执行工具、自建 RC 示例和官方资料链接。
 - 客户工程、客户参考图、个人机器路径与原始核验日志不随仓库发布。
 - 厂商教程图片、PDF、商业符号库、安装程序和运行时不随仓库分发。已有本机阅读副本保留在本机，不纳入 Git。
-- docs/images 下的 RC 图片来自本项目自建测试电路的原生导出，不是客户电路或厂商教程截图。
+- docs/images 下的 RC 图片来自本项目自建测试电路：`*-native-*.png` 是原生导出，`*-render.png` 是本包的便携渲染；都不是客户电路或厂商教程截图。
 
 The public repository includes original skills and helpers, self-contained RC examples and links to official sources. It excludes customer materials, private logs, local machine paths, vendor manual copies, commercial libraries and vendor runtimes.
 
@@ -23,7 +23,7 @@ The public repository includes original skills and helpers, self-contained RC ex
 
 使用外部资料须遵守原权利人条款；公开可访问不等于可任意复制或商业再分发。引用链接不授予本项目向他人转授厂商资料的权利。
 
-Altium Designer、PSIM、Texas Instruments、Codex、Claude Code、ZCode、DSH、Grok 等名称只用于识别软件、适配对象与资料来源。本项目独立维护，不表示官方关联、认证、赞助或背书。
+Altium Designer、PSIM、Texas Instruments、Codex、Claude Code、Gemini CLI、GitHub Copilot、Cursor、OpenCode、ZCode、DSH、CC Switch、Grok 等名称只用于识别软件、适配对象与资料来源。本项目独立维护，不表示官方关联、认证、赞助或背书。
 
 External materials remain subject to their original terms. Public accessibility is not an unrestricted redistribution license. Product names identify software, compatibility targets and sources only; no official affiliation, certification, sponsorship or endorsement is implied.
 
@@ -31,4 +31,4 @@ External materials remain subject to their original terms. Public accessibility 
 
 The layout checker embeds advance-width values measured from the metric-compatible Liberation Serif font (SIL Open Font License 1.1); no font files are distributed.
 
-Pillow、olefile 等可选依赖由使用者环境提供，按各自许可使用，不随本仓库捆绑。用户仍需自行取得 AD、PSIM 和实际使用的模型或库所需的授权。
+Pillow 等可选依赖由使用者环境提供，按各自许可使用，不随本仓库捆绑。用户仍需自行取得 AD、PSIM 和实际使用的模型或库所需的授权。

@@ -1,4 +1,5 @@
 """排版预检、原生写入几何、EMF 压线审查与技能元数据的可移植检查。"""
+
 import copy
 import importlib.util
 import json
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 AD = ROOT / 'skills/ad-schematic-layout'
 PSIM = ROOT / 'skills/psim-simulation-layout'
 sys.path[:0] = [str(AD / 'scripts'), str(Path(__file__).resolve().parent)]
-import ad_document  # noqa: E402
+import schdoc  # noqa: E402
 import check_layout as ad_check  # noqa: E402
 import native_ad  # noqa: E402
 from emf_builder import ellipse, emf, polyline16, set_extent, set_map_mode, text  # noqa: E402
@@ -38,12 +39,12 @@ def codes(result, severity=None):
 
 class AdGeometry(unittest.TestCase):
     def test_passive_hot_ends_on_grid_for_any_scale(self):
-        for scale in (.25, .375, .5, .625, .75, 1, 1.5):
+        for scale in (0.25, 0.375, 0.5, 0.625, 0.75, 1, 1.5):
             for vertical in (False, True):
                 for kind in 'RCLY':
-                    sheet = ad_document.Sheet()
+                    sheet = schdoc.Sheet()
                     sheet.passive('X1', '1', 300, 200, vertical=vertical, kind=kind, scale=scale)
-                    ends = [ad_document.pin_end(r) for r in sheet.records if r.get('RECORD') == '2']
+                    ends = [schdoc.pin_end(r) for r in sheet.records if r.get('RECORD') == '2']
                     self.assertTrue(all(v % 10 == 0 for end in ends for v in end), (scale, vertical, kind, ends))
 
     def test_part_text_uses_one_font(self):
@@ -52,9 +53,12 @@ class AdGeometry(unittest.TestCase):
         self.assertEqual(fonts, {'1'})
 
     def test_tidy_cuts_rail_at_pin_and_marks_t_junction(self):
-        plan = {'units': '10mil', 'canvas': [300, 200],
-                'parts': [{'kind': 'C', 'ref': 'C1', 'value': '1nF', 'at': [150, 120], 'vertical': True}],
-                'wires': [[[100, 100], [200, 100]]]}
+        plan = {
+            'units': '10mil',
+            'canvas': [300, 200],
+            'parts': [{'kind': 'C', 'ref': 'C1', 'value': '1nF', 'at': [150, 120], 'vertical': True}],
+            'wires': [[[100, 100], [200, 100]]],
+        }
         records = native_ad.build(plan).records
         wires = [(r['X1'], r['X2']) for r in records if r.get('RECORD') == '27']
         junctions = [(r['LOCATION.X'], r['LOCATION.Y']) for r in records if r.get('RECORD') == '29']
@@ -64,14 +68,14 @@ class AdGeometry(unittest.TestCase):
     def test_compound_file_unused_entries_use_nostream(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'x.SchDoc'
-            ad_document.write_compound(path, {'FileHeader': b'abc', 'Storage': b'', 'Additional': b'd'})
+            schdoc.write_compound(path, {'FileHeader': b'abc', 'Storage': b'', 'Additional': b'd'})
             raw = path.read_bytes()
             directory = struct.unpack_from('<I', raw, 48)[0]
-            sector = raw[512 * (directory + 1):512 * (directory + 2)]
+            sector = raw[512 * (directory + 1) : 512 * (directory + 2)]
             for index in range(4):
-                entry = sector[index * 128:(index + 1) * 128]
+                entry = sector[index * 128 : (index + 1) * 128]
                 if entry[66] == 0:
-                    self.assertEqual(struct.unpack_from('<III', entry, 68), (0xffffffff,) * 3)
+                    self.assertEqual(struct.unpack_from('<III', entry, 68), (0xFFFFFFFF,) * 3)
 
 
 class AdLayoutCheck(unittest.TestCase):
@@ -84,7 +88,7 @@ class AdLayoutCheck(unittest.TestCase):
         result = ad_check.check_plan(AD_PLAN)
         self.assertEqual((result['summary']['errors'], result['summary']['warnings']), (0, 0), result['findings'])
         self.assertTrue(result['topology']['match'])
-        self.assertGreater(result['metrics']['fill_ratio'], .3)
+        self.assertGreater(result['metrics']['fill_ratio'], 0.3)
 
     def test_structural_mistakes_are_errors(self):
         cases = {
@@ -100,6 +104,7 @@ class AdLayoutCheck(unittest.TestCase):
         def short(plan):
             plan['parts'][2]['at'] = [140, 130]
             plan['wires'][2] = [[140, 150], 'C1.1']
+
         result = self.check(short)
         self.assertIn('TOPOLOGY_MISMATCH', codes(result, 'error'))
 
@@ -107,8 +112,10 @@ class AdLayoutCheck(unittest.TestCase):
         cases = {
             'TEXT_OVERLAP': lambda p: p['labels'].append({'name': 'VIN_SENSE', 'at': [130, 150]}),
             'WIRE_THROUGH_BODY': lambda p: p['wires'].extend([[[180, 140], [180, 170]], [[170, 140], [190, 140]]]),
-            'FOUR_WAY_JUNCTION': lambda p: (p['wires'].append([[240, 150], [240, 170]]),
-                                            p['labels'].append({'name': 'VOUT', 'at': [240, 170]})),
+            'FOUR_WAY_JUNCTION': lambda p: (
+                p['wires'].append([[240, 150], [240, 170]]),
+                p['labels'].append({'name': 'VOUT', 'at': [240, 170]}),
+            ),
             'FLOATING_TITLE': lambda p: p.__setitem__('texts', [{'text': 'RC FILTER', 'at': [180, 190], 'font': 3}]),
             'SPARSE_SHEET': lambda p: p.__setitem__('canvas', [900, 600]),
             'VALUE_FORMAT': lambda p: p['parts'][2].__setitem__('value', '1e-07'),
@@ -151,27 +158,40 @@ class EmfTextReview(unittest.TestCase):
         self.assertEqual(result['text_line_conflicts'], [])
 
     def test_single_digit_above_pin_line_is_not_reported(self):
-        self.assertEqual(review(emf(text('1', (100, 100, 108, 118)), polyline16([(90, 118), (130, 118)])))
-                         ['text_line_conflicts'], [])
-        self.assertEqual(len(review(emf(text('1', (100, 100, 108, 118)), polyline16([(90, 109), (130, 109)])))
-                             ['text_line_conflicts']), 1)
+        self.assertEqual(
+            review(emf(text('1', (100, 100, 108, 118)), polyline16([(90, 118), (130, 118)])))['text_line_conflicts'], []
+        )
+        self.assertEqual(
+            len(
+                review(emf(text('1', (100, 100, 108, 118)), polyline16([(90, 109), (130, 109)])))['text_line_conflicts']
+            ),
+            1,
+        )
 
     def test_mapping_mode_is_applied(self):
-        raw = emf(set_map_mode(8), set_extent(9, 1000, 1000), set_extent(11, 100, 100),
-                  text('R1', (100, 100, 130, 120)), polyline16([(900, 1100), (1400, 1100)], (90, 110, 140, 110)))
+        raw = emf(
+            set_map_mode(8),
+            set_extent(9, 1000, 1000),
+            set_extent(11, 100, 100),
+            text('R1', (100, 100, 130, 120)),
+            polyline16([(900, 1100), (1400, 1100)], (90, 110, 140, 110)),
+        )
         result = review(raw)
         self.assertTrue(result['line_check']['transform_reliable'])
         self.assertEqual(len(result['text_line_conflicts']), 1)
 
     def test_circle_touching_text(self):
-        self.assertEqual(len(review(emf(text('Vin', (100, 100, 130, 120)), ellipse((110, 108, 150, 148))))
-                             ['text_line_conflicts']), 1)
-        self.assertEqual(review(emf(text('Vin', (100, 100, 130, 120)), ellipse((110, 125, 150, 165))))
-                         ['text_line_conflicts'], [])
+        self.assertEqual(
+            len(review(emf(text('Vin', (100, 100, 130, 120)), ellipse((110, 108, 150, 148))))['text_line_conflicts']), 1
+        )
+        self.assertEqual(
+            review(emf(text('Vin', (100, 100, 130, 120)), ellipse((110, 125, 150, 165))))['text_line_conflicts'], []
+        )
 
     def test_both_skills_ship_the_same_reviewer(self):
-        self.assertEqual((AD / 'scripts/review_emf_text.py').read_bytes(),
-                         (PSIM / 'scripts/review_emf_text.py').read_bytes())
+        self.assertEqual(
+            (AD / 'scripts/review_emf_text.py').read_bytes(), (PSIM / 'scripts/review_emf_text.py').read_bytes()
+        )
 
 
 class PsimLayoutCheck(unittest.TestCase):

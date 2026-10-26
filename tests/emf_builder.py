@@ -1,4 +1,5 @@
 """为测试构造最小 EMF；只包含审查工具读取的记录。"""
+
 import struct
 
 
@@ -11,7 +12,7 @@ def text(value, box, reference=None):
     reference = reference or box[:2]
     encoded = value.encode('utf-16le')
     offset = 76
-    body = struct.pack('<4iIff', *box, 1, 1., 1.)
+    body = struct.pack('<4iIff', *box, 1, 1.0, 1.0)
     body += struct.pack('<2iIII4iI', *reference, len(value), offset, 0, *box, 0)
     body += encoded
     return record(84, body)

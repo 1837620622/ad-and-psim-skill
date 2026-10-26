@@ -1,68 +1,73 @@
 ---
 name: psim-simulation-layout
-description: Build, lay out and simulate editable PSIM circuits (psimsch) from natural language with native element creation, a deterministic layout check, real solver runs, parameter and waveform readback, and power, efficiency and timestep verification. Use for PSIM modeling, tidying schematics, controller ICs, input or load sweeps, steady state and waveform delivery with SMV and SSF files. 用自然语言驱动 PSIM 建模、排版与原生仿真，读回参数和波形并核验结果，输出紧凑规范的电路图。
+description: Build, lay out and simulate editable PSIM circuits from natural language. On any OS write a plan, pass a deterministic layout check, render a PSIM-style preview and package a Windows build kit; on Windows with PSIM create the native psimsch, run the solver, read back waveforms, verify power, efficiency and timestep, export and screenshot. 用自然语言完成 PSIM 建模、排版和原生仿真：任何系统都能预检、渲染和生成 Windows 构建包，在 Windows 上由 PSIM 写出模型、求解、读回波形并核验结果。
 license: Proprietary commercial authorization required. See LICENSE.
-compatibility: Any agent host that gives the model local file, command and image tools. Native backend requires Windows, a licensed PSIM and its bundled Python API; layout checks and waveform measurement need only Python 3.10+.
+compatibility: Any agent host that gives the model local file, command and image tools. Check, plan-edit, render, package, measure and deliver need only Python 3.10+ on Windows, macOS or Linux; create, simulate, export and window screenshots need Windows with PSIM and its bundled Python API.
 ---
 
-# PSIM 建模排版与仿真核验
+# PSIM 建模、排版与仿真
 
-把用户描述变为可编辑 PSIM 电路，实际运行原生求解、读取数据，再审图修订并交付。器件、网络、模型假设、求解数据和交付证据一致，采用原生示例和客户范例的常规工程风格。可用 Python、DLL、原生脚本或其他适用语言，不限定实现语言。
+把用户的变换器或控制要求做成可编辑的 PSIM 模型，用真实求解器跑出结果，图纸排得紧凑清楚。
 
-新建并仿真、修改参数并复算、只整理已有排版分别处理。仅排版时保持器件和参数及逐端口连接；需要仿真时持续完成到真实求解与结果核对，不能停在静态图或建议。复杂模型优先从本机原生示例验证后扩展。
+## 能在哪做什么
 
-## 确认任务和验证层级
+| 操作 | 任何系统 | 需要 Windows + PSIM |
+| --- | --- | --- |
+| 写计划、排版预检、修改计划、便携渲染 | ✓ | |
+| 生成 Windows 构建包（`build.bat`） | ✓ | |
+| 波形 CSV 测量、整理交付目录 | ✓ | |
+| 创建 psimsch、改参数、求解、原生出图、窗口截图 | | ✓ |
 
-- 明确拓扑、额定值、控制方案、指定芯片、必需工况和交付格式。用户给的是参考数值程序时，只能先作对照，不能标注为 PSIM 仿真结果。
-- 区分功能级控制、器件模型、平均模型、热损耗模型和实物试验。要求实际控制芯片时，应使用实际参与求解的原生芯片或经核实的对应模型，不能用独立 PI 和文字芯片名替代。
-- 核对实机版本、原生文件格式、Python/DLL/API 和库。文件兼容标记与实际求解版本分别记录。
-- 不把个案的工况数、某个步长、某个效率阈值或某个版式变成普遍要求。选择能回答本次设计问题的模型精度和验证范围。
-
-## 按任务读取参考
-
-| 当前任务 | 读取材料 |
-|---|---|
-| 任何排版：栅格、主路分区、文字位置、参数写法和闸门 | [排版硬规则](references/drafting-rules.md)，每次排图前必读 |
-| 执行建模、改值、求解、原生出图与可运行例子 | [执行入口与计划格式](references/execution.md) |
-| 对照官方电路和用户图面 | [专业图例与观察要点](references/professional-gallery.md)，实际查看适用图片 |
-| 创建、改参数、改图或接口校准 | [原生建模与工程排版](references/modeling-and-layout.md) |
-| 时间步长、状态续算、启动与稳态 | [求解、状态与时间基准](references/solver-and-timebase.md) |
-| 变压器、损耗、效率与功率平衡 | [物理参数与测量口径](references/physics-and-measurement.md) |
-| 波形、美观、真实截图和交付 | [图纸波形与交付](references/visual-qa-and-delivery.md) |
-| 原生 API、已经验证的规律和官方来源 | [接口与模型经验](references/local-evidence.md) |
+psimsch 是 PSIM 的私有二进制格式。在 macOS/Linux 上用 `package` 生成构建包，拷到装有 PSIM 的 Windows 电脑双击 `build.bat`，由 PSIM 自己写出原生文件、求解并出图，结果与在 Windows 上直接建模相同。
 
 ## 工作流程
 
-1. **先列模型边界。** 把设计值、工程假设、原生模型输入、仿真量和实测量分开；输入、负载、寄生与保护范围有依据。
-2. **校准原生元件。** 查当前库的端口、首端位置、方向、尺寸、参数名与读写返回值。先用小电路验证，再批量搭建。多个坐标不保证能拉伸元件图形。
-3. **按功率流排图。** 输入在左、功率主路在上、输出在右；驱动、采样、控制及反馈就近。隔离两侧回流清楚，不让全局地或测量方式意外跨接隔离。坐标、文字区和间距按[排版硬规则](references/drafting-rules.md)执行，创建前运行 `scripts/check_layout.py` 修到 0 error。
-4. **读回真实属性。** 以类型、名称和正确索引定位元件，保存后重新打开，核对参数、关联文字、网络和库依赖。改变 Vin、负载等以后重新导出，不只更新图上文字。
-5. **分阶段求解。** 先检查启动和明显异常，再确认稳态，随后执行所需输入/负载扫描、阶跃和敏感性验证。已有合格结果保留，新增失败先定位，避免无目的地重复全工况。
-6. **验证时间与物理。** 实测原生门极或振荡波形的频率；记录设定积分步长、实际采用步长和输出采样间隔。检查步长收敛、整周期统计、储能变化与功率平衡。
-7. **真实出图。** 图纸来自完整原生模型，波形来自实际求解。`export` 结果中的 `text_review` 须为通过，再查看全图、局部与结果窗口后修订。需要截图时用真实软件窗口，不能伪造界面。
-8. **复算与交付。** 保存模型、必要参数和依赖、原始 SMV、必要 SSF 和统计窗口；按用户清单打包，解压检查并在实际软件版本中重新打开、适当复算。
+1. **列模型边界。** 分清设计值、工程假设、模型输入、仿真量和实测量；明确拓扑、额定值、控制方式、指定芯片、工况和交付格式。用户给的数值程序结果只能作对照，不能当 PSIM 结果。
+2. **读排版规则。** 每次排图前读 [排版硬规则](references/drafting-rules.md)。
+3. **写计划并预检。** 格式和命令见 [命令与计划格式](references/commands.md)。`check` 修到 0 error，看便携渲染。
+4. **建模。** 有 PSIM 就直接 `create`；没有就 `package`，在 Windows 上运行构建包。复杂元件先用小电路校准端口和参数，见 [建模与元件校准](references/modeling.md)。
+5. **分阶段求解。** 先看启动和明显异常，再确认稳态，然后做输入/负载扫描和阶跃。时间步长与稳态见 [求解与时间基准](references/solver-and-timebase.md)。
+6. **核验物理量。** 频率从实际波形测；效率只在稳态、方向一致、边界合适时才叫效率。见 [物理量与测量](references/physics-and-measurement.md)。
+7. **出图与交付。** `export` 的 `text_review` 必须通过，再看全图和局部；`deliver` 生成客户目录（模型和结果）和归档目录，不打压缩包。见 [图纸、波形与交付](references/delivery.md)。
 
-## 核心取舍
+## 命令速查
 
-- 排版服务电路阅读，不用彩色卡片、渐变、大空标题或无意义网格元件堆。芯片外围按功能紧邻，不把所有阻容散放在图外靠标号勉强对应。
-- 为得到好看的结果删除损耗、泄漏、饱和或启动限制会改变设计结论。先说明模型边界，再判断指标。
-- 变压器 R、L 字段按该模型的参照侧输入；不能把副边实物值直接填入已折算到原边的字段。
-- 稳态前的输入功率可能用来给电容充电。未排除储能影响时，只报告功率比，不把它称作效率。
-- Time 列首先证明输出采样间隔。没有 Print Step、自动步长或日志证据时，不能仅凭它断言求解器的内部步长。
-- 功能级仿真、软件原生求解、目标旧版本实测、硬件测量分别表述，不互相冒充。
-
-## 辅助测量工具
-
-`scripts/native_psim.py` 提供版本、原生属性检查、创建、改值、求解、原生图纸导出和本机 Python 转换入口。复杂版式可从原生导出脚本校准几何后重建副本，不以绘图程序伪造电路。完整命令与局限见执行文档。
-
-`scripts/check_layout.py` 在调用 PSIM 前检查计划：导线正交与栅格、关联文字重叠、文字压到符号或导线、仿真控制位置、字号统一和参数写法；`create` 自动运行它。`scripts/review_emf_text.py` 审查原生 EMF 的文字重叠、越界和压线，`export` 自动附带摘要。
-
-`scripts/analyze_waveform.py` 读取原生导出的 CSV，计算按时间加权的均值、RMS、峰峰值、功率、窗口储能变化和门极频率，并报告输出采样间隔。它不运行 PSIM，也不自动认证稳态。
+在本技能目录下运行，输出 JSON：
 
 ```text
-python scripts/analyze_waveform.py native.csv --time Time --pin Pin --pout Pout --signal Vout --end 0.5 --fundamental-hz 50 --cycles 5 --output metrics.json
+python scripts/native_psim.py env                               # 本机能做什么
+python scripts/native_psim.py check plan.json                   # 排版预检
+python scripts/native_psim.py plan-edit plan.json ops.json new.json
+python scripts/native_psim.py render plan.json view.png         # PSIM 样式便携渲染
+python scripts/native_psim.py package plan.json kit/            # Windows 构建包
+python scripts/native_psim.py create plan.json model.psimsch    # Windows + PSIM
+python scripts/native_psim.py simulate model.psimsch result/
+python scripts/native_psim.py export model.psimsch drawing/model.emf
+python scripts/native_psim.py screenshot model.psimsch shot.png # 有 PSIM 截窗口，否则渲染计划
+python scripts/analyze_waveform.py result/native.csv --pin Pin --pout Pout --end 0.5 --fundamental-hz 50 --cycles 5
+python scripts/native_psim.py deliver work/ delivery/ --name 项目名
 ```
 
-确认稳态且模型损耗与边界合适后才加 `--steady`。详见 [物理参数与测量口径](references/physics-and-measurement.md)。有原生数据读取或模型问题时回到软件与参数，不修改 CSV 使结果“通过”。
+`scripts/mcp_server.py` 把这些命令作为 MCP 工具提供，见 [命令与计划格式](references/commands.md#mcp)。
 
-本技能采用专有商业授权，见 [LICENSE](LICENSE)；微信 1837620622，仅接受赞助和商业合作。第三方图例不属于本技能原创授权范围。
+## 底线
+
+- 仿真结果必须来自 PSIM 求解器；控制芯片要用实际参与求解的模型，不能用独立 PI 加一个芯片名的文字框代替。
+- 为了结果好看去掉损耗、漏感、饱和或启动限制，会改变设计结论；先说明模型边界再判断指标。
+- Time 列只证明输出采样间隔，没有其他证据时不能当作求解器内部步长。
+- 便携渲染只用于调试；对外的图用 PSIM 原生出图或真实窗口截图，并说明来源。
+- 功能级仿真、原生求解、旧版本实测、硬件测量分开表述。
+
+## 参考资料
+
+| 需要时读 | 文件 |
+| --- | --- |
+| 排版数字、去 AI 味检查单、闸门 | [drafting-rules.md](references/drafting-rules.md) |
+| 全部命令、计划格式、编辑操作、构建包、MCP | [commands.md](references/commands.md) |
+| 模型层级、元件校准、保存前的电气审阅 | [modeling.md](references/modeling.md) |
+| 时间步长、状态续算、稳态 | [solver-and-timebase.md](references/solver-and-timebase.md) |
+| 变压器折算、功率、效率、PF、测量工具 | [physics-and-measurement.md](references/physics-and-measurement.md) |
+| 图纸审阅、波形风格、截图称呼、交付目录 | [delivery.md](references/delivery.md) |
+| 官方参考与已验证的接口经验 | [sources-and-lessons.md](references/sources-and-lessons.md) |
+
+本技能为专有商业授权，见 [LICENSE](LICENSE)；微信 1837620622。

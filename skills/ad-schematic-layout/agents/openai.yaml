@@ -1,4 +1,4 @@
 interface:
-  display_name: "AD 建模与原理图排版"
-  short_description: "控制 AD 完成可编辑电路建模、参考图排版、原生编译校核与出图"
-  default_prompt: "使用 $ad-schematic-layout 按任务书和参考图完成可编辑 AD 电路，检查网络并原生出图。"
+  display_name: "AD 原理图建模与排版"
+  short_description: "生成可编辑的 AD 原理图，排版预检、便携渲染，在 Windows 上原生编译与出图"
+  default_prompt: "使用 $ad-schematic-layout 按要求和参考图做出可编辑的 AD 原理图，预检通过后原生编译、出图并整理交付。"
