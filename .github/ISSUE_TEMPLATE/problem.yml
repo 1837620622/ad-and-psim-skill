@@ -1,0 +1,35 @@
+name: 问题反馈
+description: 反馈建模、排版、仿真或兼容问题
+title: "[问题] "
+body:
+  - type: input
+    id: agent
+    attributes:
+      label: Agent 与宿主版本
+      placeholder: Codex / Claude Code / ZCode / DSH / 其他
+    validations:
+      required: true
+  - type: input
+    id: software
+    attributes:
+      label: AD 或 PSIM 实际版本
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 提供最小任务描述与执行命令，客户保密工程可用简化电路替代。
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 预期结果与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 日志与局部图
+      description: 可附原生错误、求解日志、参数读回或排版截图，勿提交账号凭据。

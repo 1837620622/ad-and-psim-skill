@@ -1,0 +1,14 @@
+/_核验/
+/work/
+/dist/
+/skills/*/references/images/
+/skills/*/references/professional/
+**/__pycache__/
+*.py[cod]
+*.zip
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

@@ -1,0 +1,48 @@
+AD and PSIM Skill — 专有商业授权声明 / Proprietary Commercial Notice
+
+权利人 / Rights holder：传康Kk（万能程序员）
+联系 / Contact：微信 / WeChat 1837620622
+
+中文
+
+1. 适用范围
+本声明仅适用于权利人依法享有相应权利的原创程序、技能指令和文档。第三方软件、商标、文档、模型及用户或客户资料不因此转为本项目所有，仍适用各自的权利和许可条件。
+
+2. 公开展示与平台权限
+本项目公开展示源码，但不采用开源许可证，也不提供默认的免费使用或试用许可。本声明不限制适用法律允许的行为，以及 GitHub 服务条款授予的平台服务范围内的浏览、fork 等权限，不撤回权利人已经作出的有效授权。公开可见或可 fork 本身，不构成超出上述范围的额外使用或商业授权。
+
+3. 另行书面授权
+在适用法律、平台条款或已有有效协议未另行允许的范围内，运行、修改、集成、部署、再分发、转授权或对外提供本项目原创内容及其服务，须先取得权利人的书面授权。具体用途、交付形式、修改和分发权限、费用及支持范围，以双方另行确认的书面协议为准。权利人自行维护和使用本项目不受此申请流程限制。
+
+4. 赞助与商业合作
+仅接受赞助、商业合作及授权咨询。赞助本身不自动授予使用、商业集成或再分发许可；是否包含授权，以书面约定为准。
+
+5. 第三方权利
+本项目不授予 Altium Designer、PSIM、器件库、第三方运行时或其它第三方内容的使用权。产品和厂商名称仅用于说明适配对象及资料来源，不表示官方关联、认证、赞助或背书。公开仓库不分发客户工程、客户截图、商业库或厂商手册副本。详见 THIRD_PARTY_NOTICES.md。
+
+6. 工程验证与责任范围
+自动建模、排版和仿真结果仍须按具体器件、软件版本和用途复核。示例验证不等于对所有拓扑、软件版本、硬件性能或制造安全的保证。服务内容、质量要求和责任按适用法律及双方书面协议确定；本声明不排除依法不得排除的权利或责任。
+
+中英文表述如有解释差异，以双方有效书面协议及适用法律确定具体权利义务。
+
+English
+
+1. Scope
+This notice covers only original code, skill instructions and documentation to the extent that the rights holder lawfully holds the relevant rights. Third-party software, trademarks, documentation, models and customer materials retain their own ownership and license terms.
+
+2. Public visibility and platform rights
+The source is publicly visible, but the project is not offered under an open-source license or a default free-use or trial license. This notice does not restrict rights granted by applicable law, rights granted through GitHub's Terms of Service for use of the platform, including viewing and forking, or valid permissions already granted by the rights holder. Public visibility or the ability to fork does not itself grant additional use or commercial rights beyond those sources.
+
+3. Separate written authorization
+To the extent not otherwise permitted by applicable law, platform terms or an existing valid agreement, running, modifying, integrating, deploying, redistributing, sublicensing or providing services based on the original project contents requires prior written authorization from the rights holder. Permitted purposes, deliverables, modification and distribution rights, fees and support are governed by a separate written agreement. These authorization requirements do not restrict the rights holder's own maintenance and use of the project.
+
+4. Sponsorship and cooperation
+Only sponsorship, commercial cooperation and licensing inquiries are accepted. Sponsorship alone does not grant use, commercial integration or redistribution rights unless a written agreement states otherwise.
+
+5. Third-party rights
+This project grants no license to Altium Designer, PSIM, component libraries, vendor runtimes or other third-party materials. Product and vendor names identify compatibility targets and sources only; no official affiliation, certification, sponsorship or endorsement is implied. The public repository excludes customer projects, customer screenshots, commercial libraries and copies of vendor manuals. See THIRD_PARTY_NOTICES.md.
+
+6. Engineering validation and responsibility
+Models, layouts and simulation results require review for the actual components, software version and intended use. Example validation is not a guarantee for all topologies, software versions, hardware performance or manufacturing safety. Applicable law and a separate written agreement determine service scope, quality requirements and responsibility. Nothing here excludes rights or liabilities that cannot lawfully be excluded.
+
+Any interpretation differences between the Chinese and English text are resolved according to the parties' valid written agreement and applicable law.

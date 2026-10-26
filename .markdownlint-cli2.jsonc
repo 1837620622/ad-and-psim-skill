@@ -1,0 +1,12 @@
+{
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD060": false
+  },
+  "ignores": [
+    "_核验/**",
+    "skills/**/references/professional/**",
+    "skills/**/references/images/**"
+  ]
+}
