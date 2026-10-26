@@ -105,9 +105,13 @@ Replace the example installation path with your actual directory. Use fresh outp
 
 These native exports are from self-contained RC examples. They demonstrate file generation and linked labels; complex circuit layouts require their own review.
 
-| Native AD export | Native PSIM export |
-| --- | --- |
-| ![Native export of the basic AD RC schematic](docs/images/ad-native-rc.png) | ![Native export of the basic PSIM RC schematic](docs/images/psim-native-rc.png) |
+**Complete native AD export** (open the image to inspect pins and labels):
+
+![Native export of the basic AD RC schematic](docs/images/ad-native-rc.png)
+
+**Native PSIM export** (blank margins cropped for reading):
+
+![Native export of the basic PSIM RC schematic](docs/images/psim-native-rc.png)
 
 ## Validation and limits
 

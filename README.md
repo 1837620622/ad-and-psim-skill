@@ -104,9 +104,13 @@ python skills/psim-simulation-layout/scripts/native_psim.py --psim-dir "$psimDir
 
 下面是自建 RC 电路的原生接口验证图，用于展示文件生成和关联标注，复杂电路的排版质量需另行审阅。
 
-| AD 原生导出 | PSIM 原生导出 |
-| --- | --- |
-| ![AD 基础 RC 原理图的原生导出](docs/images/ad-native-rc.png) | ![PSIM 基础 RC 原理图的原生导出](docs/images/psim-native-rc.png) |
+**AD 原生完整导出**（点击图片查看引脚与标注）：
+
+![AD 基础 RC 原理图的原生导出](docs/images/ad-native-rc.png)
+
+**PSIM 原生导出**（仅裁去空白的阅读版）：
+
+![PSIM 基础 RC 原理图的原生导出](docs/images/psim-native-rc.png)
 
 ## 验证状态与边界
 
