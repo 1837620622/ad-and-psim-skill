@@ -24,6 +24,7 @@ PACKAGE_TOOLS = ('native_psim.py', 'check_layout.py', 'psim_plan.py', 'review_em
 
 
 def write_json(path, data):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(
         json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8', newline='\n'
     )
@@ -625,6 +626,7 @@ def main():
                 data = export(psim, args.source, args.target, args.dpi)
         text = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False)
         if args.report:
+            Path(args.report).parent.mkdir(parents=True, exist_ok=True)
             Path(args.report).write_text(text + '\n', encoding='utf-8', newline='\n')
         print(text)
         return 1 if failed else 0

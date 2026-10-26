@@ -25,6 +25,7 @@ ELECTRICAL = {'input': 0, 'bidirectional': 1, 'output': 2, 'open_collector': 3, 
 
 
 def write_json(path, data):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
 
 

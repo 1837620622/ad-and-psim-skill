@@ -330,6 +330,7 @@ def main():
         result['encoding'] = encoding
         text = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)
         if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(text + '\n', encoding='utf-8')
         print(text)
         return 0

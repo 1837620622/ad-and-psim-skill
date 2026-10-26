@@ -322,6 +322,7 @@ def main():
             raise ValueError('输出路径不能覆盖输入')
         result = review(args.emf.read_bytes(), border, args.overlap_ratio)
         if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         print(json.dumps({k: v for k, v in result.items() if k != 'texts'}, ensure_ascii=False, indent=2))
         return int(

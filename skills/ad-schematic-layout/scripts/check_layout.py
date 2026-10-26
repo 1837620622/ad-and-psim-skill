@@ -1002,6 +1002,7 @@ def render(model, texts, findings, path, scale=4.0):
         fill=(120, 120, 120),
         font=font(14),
     )
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     image.save(path)
     return {'preview': str(path), 'pixel_size': [width, height]}
 
@@ -1036,6 +1037,7 @@ def main():
         result = check_plan(json.loads(args.plan.read_text(encoding='utf-8-sig')), args.preview, args.scale)
         text = json.dumps(result, ensure_ascii=False, indent=2)
         if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(text + '\n', encoding='utf-8')
         brief = {k: result[k] for k in ('summary', 'metrics')}
         brief['findings'] = [f for f in result['findings'] if f['severity'] != 'info'] or result['findings']

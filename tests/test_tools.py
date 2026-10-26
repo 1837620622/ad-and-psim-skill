@@ -265,6 +265,26 @@ class Installers(unittest.TestCase):
             self.assertEqual(code, 0)
 
 
+class ReadmeCommands(unittest.TestCase):
+    def test_commands_create_missing_output_folders(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root, 'work')
+            preview = ['--preview', work / 'draft.png'] if HAS_PILLOW else []
+            code, result, error = run(AD / 'native_ad.py', 'check', AD_PLAN, *preview, cwd=root)
+            self.assertEqual(code, 0, error)
+            self.assertEqual(result['summary']['errors'], 0)
+            code, result, error = run(AD / 'native_ad.py', 'create', AD_PLAN, work / 'ad', cwd=root)
+            self.assertEqual(code, 0, error)
+            schematic = work / 'ad/RC_Filter.SchDoc'
+            code, result, error = run(AD / 'native_ad.py', 'import', schematic, work / 'new/plan.json', cwd=root)
+            self.assertEqual(code, 0, error)
+            code, result, error = run(PSIM / 'check_layout.py', PSIM_PLAN, '--output', work / 'psim/report.json')
+            self.assertEqual(code, 0, error)
+            self.assertTrue((work / 'psim/report.json').is_file())
+            if HAS_PILLOW:
+                self.assertTrue((work / 'draft.png').is_file())
+
+
 class SharedFiles(unittest.TestCase):
     def test_shared_modules_are_identical(self):
         for name in SHARED:
