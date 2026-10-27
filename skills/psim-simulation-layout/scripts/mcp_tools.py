@@ -1,5 +1,7 @@
 """PSIM 技能的 MCP 工具定义：每个工具对应 native_psim.py 或 analyze_waveform.py 的一个命令。"""
 
+import json
+
 SCRIPT = 'native_psim.py'
 
 
@@ -21,11 +23,19 @@ def _optional(arguments, flag, key):
     return [flag, str(arguments[key])] if arguments.get(key) not in (None, '') else []
 
 
+def _repeat(arguments, flag, key):
+    """重复参数：接受列表、JSON 数组文本或单个字符串，避免把字符串逐字符展开。"""
+    value = arguments.get(key)
+    if isinstance(value, str):
+        value = json.loads(value) if value.lstrip().startswith('[') else [value]
+    return [v for item in value or [] for v in (flag, str(item))]
+
+
 def _render_options(arguments):
     return [
         *_optional(arguments, '--renderer', 'renderer'),
-        *[v for p in arguments.get('font_files', []) for v in ('--font-file', p)],
-        *[v for p in arguments.get('font_dirs', []) for v in ('--font-dir', p)],
+        *_repeat(arguments, '--font-file', 'font_files'),
+        *_repeat(arguments, '--font-dir', 'font_dirs'),
         *(['--no-system-fonts'] if arguments.get('no_system_fonts') else []),
     ]
 
@@ -75,7 +85,7 @@ TOOLS = [
             m(a['plan']),
             a['folder'],
             *_optional(a, '--name', 'name'),
-            *[v for p in a.get('include', []) for v in ('--include', p)],
+            *_repeat(a, '--include', 'include'),
         ],
     },
     {
@@ -96,6 +106,8 @@ TOOLS = [
                 'reference': PATH,
                 'candidate': PATH,
                 'waveforms': {'type': 'boolean'},
+                'signals': {'type': 'array', 'items': {'type': 'string'}, 'description': 'CSV 列名；默认比较全部列'},
+                'time': {'type': 'string', 'description': '时间列名，默认 Time'},
                 'atol': {'type': 'number'},
                 'rtol': {'type': 'number'},
                 'time_atol': {'type': 'number'},
@@ -106,6 +118,8 @@ TOOLS = [
             a['reference'],
             a['candidate'],
             *(['--waveforms'] if a.get('waveforms') else []),
+            *_repeat(a, '--signal', 'signals'),
+            *_optional(a, '--time', 'time'),
             *_optional(a, '--atol', 'atol'),
             *_optional(a, '--rtol', 'rtol'),
             *_optional(a, '--time-atol', 'time_atol'),
@@ -258,7 +272,7 @@ TOOLS = [
             a['work'],
             a['output'],
             *_optional(a, '--name', 'name'),
-            *[x for pattern in a.get('include', []) for x in ('--include', pattern)],
+            *_repeat(a, '--include', 'include'),
         ],
     },
 ]

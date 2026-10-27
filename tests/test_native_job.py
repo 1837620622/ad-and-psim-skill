@@ -1,4 +1,4 @@
-"""移动端交接的可移植验证；真实 Windows 求解另在原生环境复验。"""
+"""Mac/Linux 与 Windows 交接的可移植验证；真实 Windows 求解另在原生环境复验。"""
 
 import json
 from pathlib import Path
@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 AD = ROOT / 'skills/ad-schematic-layout/scripts'
@@ -83,6 +84,39 @@ class PortablePreparation(unittest.TestCase):
             native_job.prepare('ad', folder / 'plan.json', folder / 'job', include=['params.txt'])
             request = native_job.read_json(folder / 'job' / native_job.REQUEST)
             self.assertIn('input/params.txt', request['files'])
+
+    def test_dependency_outside_plan_folder_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / 'plans').mkdir()
+            (folder / 'plans/plan.json').write_bytes(
+                (ROOT / 'skills/ad-schematic-layout/assets/rc-filter-plan.json').read_bytes()
+            )
+            (folder / 'secret.txt').write_text('x', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, '计划所在目录'):
+                native_job.prepare('ad', folder / 'plans/plan.json', folder / 'job', include=['../secret.txt'])
+            self.assertFalse((folder / 'job').exists())
+
+    def test_failed_preparation_leaves_folder_reusable(self):
+        plan = ROOT / 'skills/ad-schematic-layout/assets/rc-filter-plan.json'
+        real = native_job.command
+
+        def broken(script, arguments, **options):
+            if arguments and arguments[0] == 'render':
+                return {'exit_code': 1, 'result': None, 'stderr': 'render failed'}
+            return real(script, arguments, **options)
+
+        with tempfile.TemporaryDirectory() as directory:
+            job = Path(directory, 'job')
+            with mock.patch.object(native_job, 'command', broken), self.assertRaises(RuntimeError):
+                native_job.prepare('ad', plan, job)
+            self.assertFalse(job.exists())
+            job.mkdir()
+            with mock.patch.object(native_job, 'command', broken), self.assertRaises(RuntimeError):
+                native_job.prepare('ad', plan, job)
+            self.assertEqual(list(job.iterdir()), [])
+            native_job.prepare('ad', plan, job)
+            self.assertTrue((job / native_job.REQUEST).is_file())
 
 
 class ReturnedResults(unittest.TestCase):

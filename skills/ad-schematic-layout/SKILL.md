@@ -3,7 +3,7 @@ name: ad-schematic-layout
 description: Create, edit and lay out editable Altium Designer schematics (SchDoc/PrjPcb) from natural language on any OS, pass a deterministic layout check, render previews, then compile, compare pin-level nets, export and screenshot natively on Windows. Use for AD schematic modeling, reproducing a reference drawing, tidying an existing sheet and delivering clean project folders. 用自然语言在任何系统上创建、修改和排版可编辑的 Altium Designer 原理图，经排版预检后在 Windows 上原生编译、核对网络、出图和截图，并整理交付。
 license: Proprietary commercial authorization required. See LICENSE.
 metadata:
-  compatibility: Python 3.10+ on Windows, macOS or Linux for planning, creation, editing, handoff, reception and comparison. Native compilation/export needs Windows with Altium Designer; native PNG reception needs no vendor software on the mobile host.
+  compatibility: Python 3.10+ on Windows, macOS or Linux for planning, creation, editing, handoff, reception and comparison. Native compilation/export needs Windows with Altium Designer; receiving the native PNG needs no vendor software on Mac/Linux.
 ---
 
 # AD 原理图建模与排版
@@ -19,7 +19,7 @@ metadata:
 | 导入现有 SchDoc、按操作清单修改、便携渲染 | ✓ | |
 | 原生编译、逐引脚网表、原生出图、窗口截图 | | ✓ |
 | 整理交付目录 | ✓ | |
-| 移动端准备任务、接收原生 PNG 与结果、比较文件 | ✓ | |
+| 准备交给 Windows 的任务、接收原生 PNG 与结果、比较文件 | ✓ | |
 
 在 macOS/Linux 生成的 SchDoc 发到 Windows 用 AD 打开，内容与在 Windows 上生成的完全相同；交付前仍要在 Windows 上做一次原生编译和出图。
 
@@ -33,7 +33,7 @@ metadata:
 6. **原生确认（Windows）。** `verify` 编译并比较逐引脚网表；`export` 原生出图，结果里的 `text_review` 必须通过（无文字重叠、越界、压线），再逐区看图。
 7. **交付。** `deliver` 生成两个目录：给客户的只有工程和图纸，过程文件放归档目录，不打压缩包。见 [核验与交付](references/verification-and-delivery.md)。
 
-Mac/Linux 移动办公时，使用 `handoff` 准备完整任务目录，传到 Windows 双击 `run.bat`，再用 `receive` 校验接收。要确认与实际软件的图面一致，直接查看接收的原生 PNG；接收器不重绘它。离线便携渲染仍是近似预览，不能声称任意器件和字体逐像素一致。详见 [移动端交接与结果一致性](references/mobile-workflow.md)。
+在 Mac/Linux 上工作时，用 `handoff` 准备完整任务目录，传到 Windows 双击 `run.bat`，再用 `receive` 校验接收。要确认与实际软件的图面一致，直接查看接收的原生 PNG；接收器不重绘它。离线便携渲染仍是近似预览，不能声称任意器件和字体逐像素一致。详见 [交接与结果一致性](references/handoff.md)。
 
 ## 命令速查
 
@@ -50,8 +50,8 @@ python scripts/native_ad.py screenshot out/X.SchDoc shot.png      # 有 AD 截�
 python scripts/native_ad.py verify out/X.PrjPcb verify/ --expected out/expected.json
 python scripts/native_ad.py export out/X.SchDoc drawing/
 python scripts/native_ad.py deliver out/ delivery/ --name X
-python scripts/native_ad.py handoff plan.json mobile-job/
-python scripts/native_ad.py receive mobile-job/ returned-results/ final/
+python scripts/native_ad.py handoff plan.json job/
+python scripts/native_ad.py receive job/ returned-results/ final/
 python scripts/native_ad.py compare reference.SchDoc final/X.SchDoc
 ```
 
@@ -73,6 +73,6 @@ python scripts/native_ad.py compare reference.SchDoc final/X.SchDoc
 | 原生 API、改库改连接、完整芯片检查 | [native-and-electrical.md](references/native-and-electrical.md) |
 | 网表比较、出图审查、交付目录 | [verification-and-delivery.md](references/verification-and-delivery.md) |
 | 官方参考图来源和已经踩过的坑 | [sources-and-lessons.md](references/sources-and-lessons.md) |
-| Mac/Linux 交接、原生预览、哈希与波形比较 | [mobile-workflow.md](references/mobile-workflow.md) |
+| Mac/Linux 交接、原生预览、哈希与波形比较 | [handoff.md](references/handoff.md) |
 
 本技能为专有商业授权，见 [LICENSE](LICENSE)；微信 1837620622。

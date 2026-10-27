@@ -918,93 +918,73 @@ def check_records(records, pin_map=None, grid=10):
 
 
 def render(model, texts, findings, path, scale=4.0):
-    """草图预览：只用于原生建模前的快速查看，不能当作原生导出或交付图。"""
-    from PIL import Image, ImageDraw, ImageFont
+    """草图预览：只用于原生建模前的快速查看，不能当作原生导出或交付图。
+
+    .svg 只用标准库；.png 用 resvg-py 或 Pillow（与便携渲染相同的画布）。
+    """
+    from canvas import open_canvas
 
     border = model['border']
     x0, y0 = border[0] - 20, border[1] - 20
-    width = int((border[2] - x0 + 20) * scale)
-    height = int((border[3] - y0 + 20) * scale) + 24
-    image = Image.new('RGB', (width, height), 'white')
-    draw = ImageDraw.Draw(image)
+    footer = 6
+    width, height = border[2] + 20 - x0, border[3] + 20 - y0 + footer
 
-    def p(x, y):
-        return ((x - x0) * scale, (border[3] + 20 - y) * scale)
+    def q(x, y):
+        return x - x0, y - y0 + footer
 
-    def font(px):
-        for candidate in (
-            'times.ttf',
-            'LiberationSerif-Regular.ttf',
-            '/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf',
-            '/Library/Fonts/Times New Roman.ttf',
-        ):
-            try:
-                return ImageFont.truetype(candidate, max(6, round(px)))
-            except OSError:
-                continue
-        return ImageFont.load_default()
-
-    draw.rectangle([*p(border[0], border[3]), *p(border[2], border[1])], outline=(128, 0, 0))
+    canvas = open_canvas(path, width, height, scale, '#ffffff')
+    dark_red, navy = '#800000', '#000080'
+    canvas.rect(*q(border[0], border[1]), *q(border[2], border[3]), dark_red, 0.25)
     for part in model['parts'].values():
         for box in part['rects']:
-            draw.rectangle([*p(box[0], box[3]), *p(box[2], box[1])], fill=(255, 255, 176), outline=(128, 0, 0))
+            canvas.rect(*q(box[0], box[1]), *q(box[2], box[3]), dark_red, 0.25, fill='#ffffb0')
         for a, b in part['lines']:
-            draw.line([p(*a), p(*b)], fill=(128, 0, 0), width=max(1, round(scale / 4)))
+            canvas.lines([q(*a), q(*b)], dark_red, 0.25)
     for pin in model['pins']:
-        draw.line([p(*pin['base']), p(*pin['hot'])], fill=(0, 0, 0), width=max(1, round(scale / 4)))
+        canvas.lines([q(*pin['base']), q(*pin['hot'])], '#000000', 0.25)
     for a, b in model['wires']:
-        draw.line([p(*a), p(*b)], fill=(0, 0, 128), width=max(1, round(scale / 3)))
+        canvas.lines([q(*a), q(*b)], navy, 0.33)
     dots = set(model['junctions'])
     # AD 在热端或端口锚点落在导线中段时自动显示连接点。
     for point in [pin['hot'] for pin in model['pins']] + [port['at'] for port in model['ports']]:
         if any(interior(point, seg) for seg in model['wires']):
             dots.add(point)
-    for x, y in dots:
-        cx, cy = p(x, y)
-        r = 1.5 * scale
-        draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(0, 0, 128))
+    for point in dots:
+        canvas.ellipse(*q(*point), 1.5, 1.5, navy, 0.1, fill=navy)
     for port in model['ports']:
-        symbol, _ = port_geometry(port)
         x, y = port['at']
         if port['style'] in GROUND_STYLES:
-            draw.line([p(x, y), p(x, y - 8)], fill=(128, 0, 0))
+            canvas.lines([q(x, y), q(x, y - 8)], dark_red, 0.25)
             for k, half in enumerate((10, 6, 2)):
-                draw.line([p(x - half, y - 8 - 4 * k), p(x + half, y - 8 - 4 * k)], fill=(128, 0, 0))
+                canvas.lines([q(x - half, y - 8 - 4 * k), q(x + half, y - 8 - 4 * k)], dark_red, 0.25)
         else:
-            draw.line([p(x, y), p(x, y + 8)], fill=(128, 0, 0))
-            draw.line([p(x - 8, y + 8), p(x + 8, y + 8)], fill=(128, 0, 0))
+            canvas.lines([q(x, y), q(x, y + 8)], dark_red, 0.25)
+            canvas.lines([q(x - 8, y + 8), q(x + 8, y + 8)], dark_red, 0.25)
     for item in texts:
-        cell = item['cell']
-        vertical = item.get('orientation', 0) % 2 == 1
-        size = EM_PER_PT * item.get('pt', model['system_pt']) * scale
-        color = (128, 0, 0) if item['kind'] in ('label', 'power') else (0, 0, 128)
-        face = font(size)
-        if vertical:
-            layer = Image.new('RGBA', (int((cell[3] - cell[1]) * scale) + 4, int(size * 1.3) + 4), (255, 255, 255, 0))
-            ImageDraw.Draw(layer).text((0, 0), item['text'], fill=color, font=face)
-            layer = layer.rotate(90, expand=True)
-            left, top = p(cell[0], cell[3])
-            image.paste(layer, (int(left), int(top)), layer)
+        ink = item['ink']
+        size = EM_PER_PT * item.get('pt', model['system_pt'])
+        fill = dark_red if item['kind'] in ('label', 'power') else navy
+        if item.get('orientation', 0) % 2:
+            # 逆时针 90°：基线在字形框右侧，文字自下而上。
+            canvas.text(*q(ink[2], ink[1]), item['text'], size, fill, rotation=1)
         else:
-            ink = item['ink']
-            draw.text(p(ink[0], ink[1]), item['text'], fill=color, font=face, anchor='ls')
+            canvas.text(*q(ink[0], ink[1]), item['text'], size, fill)
     for n, finding in enumerate(f for f in findings if f['severity'] != 'info'):
         if 'at' not in finding:
             continue
-        cx, cy = p(*finding['at'][:2])
-        color = (220, 0, 0) if finding['severity'] == 'error' else (230, 120, 0)
-        r = 3 * scale
-        draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=color, width=2)
-        draw.text((cx + r + 2, cy - r), str(n + 1), fill=color, font=font(3 * scale))
-    draw.text(
-        (6, height - 20),
-        'Draft preview from check_layout.py - not a native Altium export',
-        fill=(120, 120, 120),
-        font=font(14),
-    )
+        x, y = finding['at'][:2]
+        mark = '#dc0000' if finding['severity'] == 'error' else '#e67800'
+        canvas.ellipse(*q(x, y), 3, 3, mark, 0.5)
+        canvas.text(*q(x + 3.5, y + 1.5), str(n + 1), 3, mark, family='sans')
+    canvas.text(1.5, 1.5, 'Draft preview from check_layout.py - not a native Altium export', 3.5, '#787878', 'sans')
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    image.save(path)
-    return {'preview': str(path), 'pixel_size': [width, height]}
+    canvas.save(path, '#ffffff')
+    return {
+        'preview': str(path),
+        'source': 'portable_render',
+        'renderer': canvas.renderer,
+        'pixel_size': list(getattr(canvas, 'final', canvas.size)),
+    }
 
 
 def check_plan(plan, preview=None, scale=4.0):
@@ -1015,8 +995,8 @@ def check_plan(plan, preview=None, scale=4.0):
     if preview:
         try:
             result['preview'] = render(model, texts, result['findings'], preview, scale)
-        except ImportError:
-            result['preview'] = {'status': '需要 Pillow 才能生成草图预览'}
+        except (ImportError, RuntimeError):
+            result['preview'] = {'status': 'PNG 草图需要 resvg-py 或 Pillow；改用 .svg 路径只需标准库'}
     return result
 
 
@@ -1024,7 +1004,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('plan', type=Path, help='native_ad.py create 使用的 JSON 计划')
     parser.add_argument('--output', type=Path, help='写出完整 JSON 报告')
-    parser.add_argument('--preview', type=Path, help='写出 PNG 草图预览（需要 resvg-py 或 Pillow）')
+    parser.add_argument('--preview', type=Path, help='写出草图预览：.svg 只用标准库，.png 需要 resvg-py 或 Pillow')
     parser.add_argument('--scale', type=float, default=4.0, help='预览像素/10mil，默认 4')
     parser.add_argument('--strict', action='store_true', help='warning 也视为未通过')
     args = parser.parse_args()

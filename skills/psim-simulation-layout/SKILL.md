@@ -3,7 +3,7 @@ name: psim-simulation-layout
 description: Build, lay out and simulate editable PSIM circuits from natural language. On any OS write a plan, pass a deterministic layout check, render a PSIM-style preview and package a Windows build kit; on Windows with PSIM create the native psimsch, run the solver, read back waveforms, verify power, efficiency and timestep, export and screenshot. 用自然语言完成 PSIM 建模、排版和原生仿真：任何系统都能预检、渲染和生成 Windows 构建包，在 Windows 上由 PSIM 写出模型、求解、读回波形并核验结果。
 license: Proprietary commercial authorization required. See LICENSE.
 metadata:
-  compatibility: Python 3.10+ on Windows, macOS or Linux for planning, editing, handoff, reception and comparison. Native creation, simulation and export need Windows with PSIM and its Python API; native PNG/SMV/CSV reception needs no PSIM on the mobile host.
+  compatibility: Python 3.10+ on Windows, macOS or Linux for planning, editing, handoff, reception and comparison. Native creation, simulation and export need Windows with PSIM and its Python API; receiving native PNG/SMV/CSV needs no PSIM on Mac/Linux.
 ---
 
 # PSIM 建模、排版与仿真
@@ -17,7 +17,7 @@ metadata:
 | 写计划、排版预检、修改计划、便携渲染 | ✓ | |
 | 生成 Windows 构建包（`build.bat`） | ✓ | |
 | 波形 CSV 测量、整理交付目录 | ✓ | |
-| 移动端准备任务、接收原生 PNG/SMV/CSV、比较结果 | ✓ | |
+| 准备交给 Windows 的任务、接收原生 PNG/SMV/CSV、比较结果 | ✓ | |
 | 创建 psimsch、改参数、求解、原生出图、窗口截图 | | ✓ |
 
 psimsch 是 PSIM 的私有二进制格式。macOS/Linux 用 `handoff` 准备可校验的任务，交给 Windows 实际 PSIM 建模、求解和出图，再用 `receive` 接收原始结果。原生预览直接显示返回的 PNG，文件字节不变。`package` / `build.bat` 仍可作为简单构建包使用。
@@ -32,7 +32,7 @@ psimsch 是 PSIM 的私有二进制格式。macOS/Linux 用 `handoff` 准备可�
 6. **核验物理量。** 频率从实际波形测；效率只在稳态、方向一致、边界合适时才叫效率。见 [物理量与测量](references/physics-and-measurement.md)。
 7. **出图与交付。** `export` 的 `text_review` 必须通过，再看全图和局部；`deliver` 生成客户目录（模型和结果）和归档目录，不打压缩包。见 [图纸、波形与交付](references/delivery.md)。
 
-Mac/Linux 不安装 PSIM；最终预览与仿真由 Windows 返回。离线渲染只用于近似审图，不能冒充任意原生元件的精确图像。接收原生图和数据、拒收错配结果以及比较容差，见 [移动端交接与结果一致性](references/mobile-workflow.md)。
+Mac/Linux 不安装 PSIM；最终预览与仿真由 Windows 返回。离线渲染只用于近似审图，不能冒充任意原生元件的精确图像。接收原生图和数据、拒收错配结果以及比较容差，见 [交接与结果一致性](references/handoff.md)。
 
 ## 命令速查
 
@@ -50,8 +50,8 @@ python scripts/native_psim.py export model.psimsch drawing/model.emf
 python scripts/native_psim.py screenshot model.psimsch shot.png # 有 PSIM 截窗口，否则渲染计划
 python scripts/analyze_waveform.py result/native.csv --pin Pin --pout Pout --end 0.5 --fundamental-hz 50 --cycles 5
 python scripts/native_psim.py deliver work/ delivery/ --name 项目名
-python scripts/native_psim.py handoff plan.json mobile-job/
-python scripts/native_psim.py receive mobile-job/ returned-results/ final/
+python scripts/native_psim.py handoff plan.json job/
+python scripts/native_psim.py receive job/ returned-results/ final/
 python scripts/native_psim.py compare reference.csv final/waveforms/native.csv --waveforms
 ```
 
@@ -76,6 +76,6 @@ python scripts/native_psim.py compare reference.csv final/waveforms/native.csv -
 | 变压器折算、功率、效率、PF、测量工具 | [physics-and-measurement.md](references/physics-and-measurement.md) |
 | 图纸审阅、波形风格、截图称呼、交付目录 | [delivery.md](references/delivery.md) |
 | 官方参考与已验证的接口经验 | [sources-and-lessons.md](references/sources-and-lessons.md) |
-| Mac/Linux 交接、原生预览、哈希与波形比较 | [mobile-workflow.md](references/mobile-workflow.md) |
+| Mac/Linux 交接、原生预览、哈希与波形比较 | [handoff.md](references/handoff.md) |
 
 本技能为专有商业授权，见 [LICENSE](LICENSE)；微信 1837620622。

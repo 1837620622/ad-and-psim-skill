@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 AD = ROOT / 'skills/ad-schematic-layout'
 PSIM = ROOT / 'skills/psim-simulation-layout'
 sys.path[:0] = [str(AD / 'scripts'), str(Path(__file__).resolve().parent)]
+# PSIM 预检按名称导入 psim_plan；放在末尾，不遮住 AD 的同名模块。
+sys.path.append(str(PSIM / 'scripts'))
 import schdoc  # noqa: E402
 import check_layout as ad_check  # noqa: E402
 import native_ad  # noqa: E402
@@ -146,6 +148,14 @@ class AdLayoutCheck(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             result = ad_check.check_plan(AD_PLAN, Path(folder) / 'draft.png')
             self.assertTrue(Path(result['preview']['preview']).is_file())
+
+    def test_svg_preview_needs_only_the_standard_library(self):
+        with tempfile.TemporaryDirectory() as folder:
+            result = ad_check.check_plan(AD_PLAN, Path(folder) / 'draft.svg')
+            self.assertEqual(result['preview']['renderer'], 'svg')
+            text = Path(result['preview']['preview']).read_text(encoding='utf-8')
+            self.assertIn('not a native Altium export', text)
+            self.assertIn('R1', text)
 
 
 class EmfTextReview(unittest.TestCase):

@@ -30,7 +30,7 @@ Both images come from this package's portable renderer, with no AD or PSIM insta
 | Editing existing work | Import SchDoc → apply edit operations → regenerate; wires re-route orthogonally | Edit the plan; moved elements drag their wires around symbols |
 | Layout check | Grid, dangling wires, implicit shorts, predicted netlist, text overlap and text over lines, wires through parts, sheet density, value notation | Wires, grid, text overlap and text over lines, wires through symbols, simulation-control placement, value notation |
 | Preview | Offline render; display the original native PNG returned by Windows | Offline render; display the original native PNG returned by Windows |
-| Mobile workflow | Prepare on Mac/Linux, compile/export on Windows, verify returned files | Prepare on Mac/Linux, solve on Windows, receive native PNG/SMV/CSV |
+| Cross-OS handoff | Prepare on Mac/Linux, compile/export on Windows, verify returned files | Prepare on Mac/Linux, solve on Windows, receive native PNG/SMV/CSV |
 | Native (Windows) | Compile, pin-level netlist comparison, native export, window screenshot | Create, edit parameters, solve, read back waveforms, native export, window screenshot |
 | Result checks | Text overlap, clipping and text-over-line review on the native EMF | Same, plus time-weighted power, efficiency, RMS and gate-frequency measurements |
 | Delivery | Customer folder holds only the project and drawings; process files go to an archive; no zip | Customer folder holds only the model and results; process files go to an archive |
@@ -59,16 +59,7 @@ Every step prints JSON, so the model reads and fixes findings one by one instead
 
 Other software versions have not been validated and are not covered.
 
-Optional requirements select resvg for portable PNG rendering on Python 3.10, and also install Pillow 13 on Python 3.11+. They do not pin an older Pillow release with known vulnerabilities.
-
-For offline PNG previews on Mac, prefer `resvg-py`. Wheels cover both Intel and Apple Silicon, with no separate Cairo installation. After installation, `render` selects it automatically; it can also be selected explicitly:
-
-```bash
-python skills/ad-schematic-layout/scripts/native_ad.py render skills/ad-schematic-layout/assets/rc-filter-plan.json work/ad-preview.png --renderer resvg
-python skills/psim-simulation-layout/scripts/native_psim.py render skills/psim-simulation-layout/assets/rc-filter-plan.json work/psim-preview.png --renderer resvg
-```
-
-Repeat `--font-file` / `--font-dir` and use `--no-system-fonts` to restrict available fonts. JSON records hashes of explicitly supplied font files. Matching fonts reduces differences but does not guarantee pixel identity with native software. See [preview backends](docs/preview-backends.md) for the evaluation, licensing and platform limits of the AD-specific `altium-monkey` package.
+Optional requirements depend on the Python version: 3.10 gets resvg-py only (portable PNG); 3.11+ also gets Pillow 13 (native EMF to PNG on Windows), so no older Pillow with known vulnerabilities is pulled in. resvg-py needs no separate Cairo; once installed, `render` uses it automatically. Choose a backend with `--renderer resvg` or `--renderer pillow`, and pin fonts with `--font-file`, `--font-dir` and `--no-system-fonts`. See [preview backends](docs/preview-backends.md) for the comparison and font notes.
 
 ## Works on Windows, macOS and Linux
 
@@ -82,40 +73,7 @@ AD and PSIM run only on Windows. Everything that does not need the software is p
 | AD compile/export, PSIM create/solve, window screenshots | ✓ (with the software) | Hand over to a Windows PC with the software |
 | Waveform measurement, delivery | ✓ | ✓ |
 
-Mac/Linux does not need AD or PSIM. The basic AD generator writes editable files locally; compile and export them on Windows before final delivery. Native PSIM models and simulation results are produced by the actual PSIM installation on Windows.
-
-## Mobile work on Mac/Linux
-
-```bash
-# Prepare a task with its tools, plan and offline preview
-python skills/ad-schematic-layout/scripts/native_ad.py handoff skills/ad-schematic-layout/assets/rc-filter-plan.json work/mobile-ad
-python skills/psim-simulation-layout/scripts/native_psim.py handoff skills/psim-simulation-layout/assets/rc-filter-plan.json work/mobile-psim --name RC_Filter
-```
-
-Transfer the entire task folder to Windows and double-click `run.bat`. That computer needs the licensed software, Python 3.11+ and Pillow 13. Installations are discovered through the registry, or set `AD_EXE` / `PSIM_DIR`. AD creates, compiles, compares nets and exports; PSIM creates, solves and exports. A failed stage stops the run and preserves diagnostics.
-
-Transfer the Windows `native-results/` folders back as `work/returned-ad` and `work/returned-psim`, then run:
-
-```bash
-python skills/ad-schematic-layout/scripts/native_ad.py receive work/mobile-ad work/returned-ad work/final-ad
-python skills/psim-simulation-layout/scripts/native_psim.py receive work/mobile-psim work/returned-psim work/final-psim
-```
-
-Reception verifies the request, plan and every file's SHA-256. The returned `png` is the original Windows native export, displayed directly on Mac/Linux. PNG, SMV and CSV are copied byte for byte, without rendering or recalculation. Mismatched plans, failed native checks and modified files are rejected. Add explicit plan-relative dependencies with `--include params.txt` when preparing a job.
-
-| Preview source | What it establishes |
-| --- | --- |
-| `preview.render.png/svg` | Offline layout review with approximate fonts and calibrated symbols; no universal pixel-identity claim |
-| The `png` returned by `receive` | Original Windows native export; the received copy has identical bytes and shows the native drawing |
-
-Compare the full CSV with zero tolerance, or compare file hashes for drawings and projects:
-
-```bash
-python skills/psim-simulation-layout/scripts/native_psim.py compare reference/native.csv work/final-psim/waveforms/native.csv --waveforms
-python skills/ad-schematic-layout/scripts/native_ad.py compare reference/drawing.png work/final-ad/drawing/RC_Filter.png
-```
-
-Reports distinguish `byte_identical`, `numeric_equal`, `within_tolerance` and `different`. An explicit `--atol` / `--rtol` agreement is not byte identity. Different software versions, model libraries and solver settings need separate validation. See the [mobile workflow](skills/ad-schematic-layout/references/mobile-workflow.md).
+Mac/Linux does not need AD or PSIM: AD files can be written there directly and are compiled and exported on Windows before delivery; PSIM models and results always come from PSIM on Windows. See [Prepare on Mac/Linux, run on Windows](#prepare-on-maclinux-run-on-windows) under Usage.
 
 ## Install
 
@@ -201,9 +159,43 @@ python $PSIM/scripts/native_psim.py package $PSIM/assets/rc-filter-plan.json wor
 
 All commands: [AD commands](skills/ad-schematic-layout/references/commands.md), [PSIM commands](skills/psim-simulation-layout/references/commands.md).
 
+### Prepare on Mac/Linux, run on Windows
+
+On a computer without AD or PSIM, `handoff` prepares a job folder with the plan, the tools that run it and an offline preview:
+
+```bash
+python $AD/scripts/native_ad.py handoff $AD/assets/rc-filter-plan.json work/job-ad
+python $PSIM/scripts/native_psim.py handoff $PSIM/assets/rc-filter-plan.json work/job-psim --name RC_Filter
+```
+
+Copy the whole folder to a Windows PC with the licensed software (plus Python 3.11+ and Pillow 13) and double-click `run.bat`. The software is found through the registry and common folders; set `AD_EXE` or `PSIM_DIR` if it is not. AD creates, compiles, compares nets and exports; PSIM creates, solves and exports. Any failed stage stops the run and keeps the diagnostics.
+
+Copy the resulting `native-results/` back (here as `work/returned-ad` and `work/returned-psim`) and receive it:
+
+```bash
+python $AD/scripts/native_ad.py receive work/job-ad work/returned-ad work/final-ad
+python $PSIM/scripts/native_psim.py receive work/job-psim work/returned-psim work/final-psim
+```
+
+Reception checks the request, the plan and the SHA-256 of every file, and rejects mismatched plans, failed native checks and modified files. PNG, SMV and CSV are copied unchanged, never redrawn or recalculated. Add dependencies such as parameter files with `--include params.txt` when preparing the job.
+
+| Picture | What it shows |
+| --- | --- |
+| `preview.render.png/svg` in the job folder | Offline approximation for checking the layout; fonts and uncalibrated parts may differ from the native software |
+| The `png` from `receive` | The original Windows native export, byte-identical; shows the drawing as the software draws it |
+
+### Comparing results
+
+```bash
+python $PSIM/scripts/native_psim.py compare reference/native.csv work/final-psim/waveforms/native.csv --waveforms
+python $AD/scripts/native_ad.py compare reference/drawing.png work/final-ad/drawing/RC_Filter.png
+```
+
+By default every column is compared with zero tolerance, without interpolation or smoothing. Results come in four levels: `byte_identical` (same file bytes), `numeric_equal` (identical values), `within_tolerance` (within the `--atol` / `--rtol` you give) and `different`. Agreement within a tolerance is not byte identity; different software versions, model libraries and solver settings need their own checks. See [handoff and comparison](skills/ad-schematic-layout/references/handoff.md).
+
 ### MCP
 
-The MCP server uses only the Python standard library and exposes 29 tools to read, edit, check and render drawings, prepare mobile jobs, receive native results and compare files or waveforms.
+The MCP server uses only the Python standard library and exposes 29 tools to read, edit, check and render drawings, prepare jobs for Windows, receive native results and compare files or waveforms.
 
 ```bash
 claude mcp add ad-psim -- npx -y github:1837620622/ad-and-psim-skill mcp    # Claude Code
@@ -242,7 +234,7 @@ Without Node, use `python` as the command with `["<repo>/skills/ad-schematic-lay
 | Native check | `ad_verify` | `psim_simulate`, `psim_measure` |
 | Native export | `ad_export` | `psim_export` |
 | Delivery | `ad_deliver` | `psim_deliver` |
-| Mobile handoff | `ad_handoff`, `ad_receive` | `psim_handoff`, `psim_receive` |
+| Handoff and reception | `ad_handoff`, `ad_receive` | `psim_handoff`, `psim_receive` |
 | Result comparison | `ad_compare` | `psim_compare` |
 
 `ad_verify`, `ad_export`, `psim_create`, `psim_inspect`, `psim_edit`, `psim_simulate` and `psim_export` need Windows with the software; the screenshot tools fall back to the portable render without it; all other tools run on any OS.
@@ -281,7 +273,7 @@ No zip is produced; files in the work folder are copied, never moved.
 
 **Can I use it without Windows?**
 
-Yes for plans, checks, AD file generation, PSIM build kits, preview renders and delivery. Compiling, solving, native export and window screenshots need a Windows PC with the software.
+Yes for plans, checks, AD file generation, PSIM build kits or handoff jobs, preview renders and delivery. Compiling, solving, native export and window screenshots need a Windows PC with the software; `receive` brings the results back unchanged.
 
 **Will an AD file made on a Mac open differently for the customer?**
 
@@ -289,7 +281,7 @@ No. The generator writes the same bytes on every OS; the tests pin the SHA-256 o
 
 **Why does PSIM need a build kit?**
 
-A psimsch is a proprietary binary format. The target Windows PSIM installation creates, solves and verifies the model. A build kit has the plan, tools and `build.bat`; mobile jobs use `handoff` and `run.bat` and also produce a verifiable return manifest. File compatibility and the actual solver version are recorded separately.
+A psimsch is a proprietary binary format. The target Windows PSIM installation creates, solves and verifies the model. A build kit has the plan, tools and `build.bat`; cross-OS jobs use `handoff` and `run.bat` and also produce a verifiable return manifest. File compatibility and the actual solver version are recorded separately.
 
 **Skills or MCP?**
 

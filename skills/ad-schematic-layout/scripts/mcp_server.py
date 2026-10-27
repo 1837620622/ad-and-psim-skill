@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 
-SERVER = {'name': 'ad-and-psim-skill', 'version': '1.2.0'}
+SERVER = {'name': 'ad-and-psim-skill', 'version': '1.2.1'}
 PROTOCOLS = ('2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05')
 INSTRUCTIONS = (
     'Tools for Altium Designer (ad_*) and PSIM (psim_*). Call *_env first to see what this machine can run. '

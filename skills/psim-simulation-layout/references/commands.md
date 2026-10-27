@@ -91,7 +91,7 @@ kit/
 
 在装有 PSIM、Python 3.11+ 和 Pillow 13 的 Windows 电脑上双击 `build.bat`，得到 `名称.psimsch`、`result\`（SMV、CSV）和 `drawing\`（EMF、PNG）。找不到 PSIM 时先设置 `PSIM_DIR`。
 
-名称支持中文，批处理使用 UTF-8。原生文字检查失败时整个构建返回失败。需要回传校验、与移动端一致的原生预览及请求对应关系时，改用 [handoff / receive](mobile-workflow.md)。
+名称支持中文，批处理使用 UTF-8。原生文字检查失败时整个构建返回失败。需要回传校验、与准备端一致的原生预览及请求对应关系时，改用 [handoff / receive](handoff.md)。
 
 ## 复杂模型与已有图
 

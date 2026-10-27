@@ -1,10 +1,22 @@
 # 更新记录 / Changelog
 
+## 1.2.1
+
+### 改进 / Changed
+
+- AD 预检草图改用与便携渲染相同的画布：`.svg` 只需标准库，`.png` 可用 resvg-py 或 Pillow（之前帮助说支持 resvg，实际只能用 Pillow）。
+- `handoff` 中途失败时清掉半成品目录，同一路径可以直接重试；依赖文件在计划目录之外时给出明确提示。
+- MCP 的列表参数（`include`、字体、比较信号）可以是列表、JSON 数组文本或单个字符串，不再把字符串逐字符拆开；`*_compare` 增加 `signals` 和 `time`。
+- 文档把"移动端"统一改为"Mac/Linux 准备、Windows 运行"，参考文档改名为 `references/handoff.md`；README 把交接和比较放进"使用"一节，命令统一用 `$AD`、`$PSIM` 变量写法。
+- 测试文件可以单独运行。
+
+The AD draft preview now uses the shared canvas (SVG without dependencies, PNG via resvg-py or Pillow). A failed `handoff` cleans up so the same folder can be reused. MCP list arguments accept a list, a JSON array string or a single string. Docs say "prepare on Mac/Linux, run on Windows" instead of "mobile"; the reference is now `references/handoff.md`.
+
 ## 1.2.0
 
 ### 新增 / Added
 
-- Mac/Linux 的 `handoff` → Windows `run.bat` → 移动端 `receive`，自带执行脚本和显式依赖，回传原生 PNG、工程和仿真数据；逐文件核对 SHA-256。
+- Mac/Linux 的 `handoff` → Windows `run.bat` → Mac/Linux `receive`，自带执行脚本和显式依赖，回传原生 PNG、工程和仿真数据；逐文件核对 SHA-256。
 - `compare` 比较工程/图片哈希和完整 CSV 波形，区分字节相同、数值相等与显式容差相符；不插值、不平滑。
 - 可选 `resvg-py` PNG 预览后端，支持显式字体文件/目录、禁用系统字体、字体文件哈希和便携来源标记；保留 Pillow 与标准库 SVG。
 - MCP 增加六项交接与比较工具，共 29 项；渲染工具支持后端与字体选项。

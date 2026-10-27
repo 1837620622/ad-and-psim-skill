@@ -37,7 +37,7 @@ Explicit font files/directories and `--no-system-fonts` reduce uncontrolled font
 
 ## 原生一致性 / Native identity
 
-新图的离线预览仍是近似。要求看到实际软件图面时，用 [handoff / receive](../skills/ad-schematic-layout/references/mobile-workflow.md)：Windows 原软件出图和求解，Mac 接收相同字节的 PNG、SMV、CSV。接收器不重新画图或模拟另一个求解器。同一图片文件的显示缩放与屏幕色彩管理仍由查看设备决定。
+新图的离线预览仍是近似。要求看到实际软件图面时，用 [handoff / receive](../skills/ad-schematic-layout/references/handoff.md)：Windows 原软件出图和求解，Mac 接收相同字节的 PNG、SMV、CSV。接收器不重新画图或模拟另一个求解器。同一图片文件的显示缩放与屏幕色彩管理仍由查看设备决定。
 
 For native results, Windows runs the actual applications. Mac receives the original PNG and simulation data without redrawing or recalculating them. Identical file bytes do not promise identical monitor scaling or color management.
 

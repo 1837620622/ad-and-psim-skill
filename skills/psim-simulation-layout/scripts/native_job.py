@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -115,6 +116,8 @@ def prepare(tool, plan_path, folder, name=None, include=()):
     dependencies = []
     for value in include:
         source = (plan_path.parent / value).resolve()
+        if not source.is_relative_to(plan_path.parent):
+            raise ValueError(f'依赖须在计划所在目录内：{value}')
         relative = source.relative_to(plan_path.parent).as_posix()
         if not source.is_file() or relative.casefold() == 'plan.json' or source.name in (REQUEST, RESULT):
             raise ValueError('依赖须为计划同目录内的文件，且不能占用 plan.json')
@@ -122,7 +125,23 @@ def prepare(tool, plan_path, folder, name=None, include=()):
     check = command(HERE / f'native_{tool}.py', ['check', plan_path], cwd=plan_path.parent)
     if check['exit_code']:
         raise ValueError('计划预检未通过：' + json.dumps(check, ensure_ascii=False))
+    existed = Path(folder).exists()
     folder = empty_folder(folder)
+    try:
+        return _fill_job(tool, folder, plan, name, dependencies, check)
+    except BaseException:
+        # 失败时清掉半成品，同一目录可以直接重试；原本就存在的空目录保留。
+        for child in folder.iterdir():
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        if not existed:
+            folder.rmdir()
+        raise
+
+
+def _fill_job(tool, folder, plan, name, dependencies, check):
     plan['name'] = name
     staged_plan = folder / 'input/plan.json'
     write_json(staged_plan, plan)
@@ -145,12 +164,12 @@ def prepare(tool, plan_path, folder, name=None, include=()):
             shutil.copy2(HERE.parent / filename, folder / 'tool' / filename)
     (folder / 'run.bat').write_bytes(RUN_BAT.replace('\n', '\r\n').encode('ascii'))
     (folder / 'README.txt').write_text(
-        '移动端任务 / Portable native job\n\n'
+        'Windows 原生任务 / Native job for Windows\n\n'
         'Mac/Linux 不安装 AD/PSIM：可查看 preview.render.svg/png 和 AD prepared/ 工程。\n'
         '本地 render 是近似预览；要确认实际软件的效果，用 Windows 返回的原生 PNG。\n\n'
         '将整个目录复制到装有对应软件、Python 3.11+ 和 Pillow 13 的 Windows，双击 run.bat。\n'
         '自动查找失败时设置 AD_EXE 为 X2.EXE，或设置 PSIM_DIR 为 PSIM 安装目录。\n'
-        '运行产生 native-results/。将该目录复制回移动端，配合原任务运行 receive。\n'
+        '运行产生 native-results/。将该目录复制回准备任务的电脑，配合原任务运行 receive。\n'
         'receive 验证请求、计划和每个文件的 SHA-256，原生图片和数据保持原样。\n\n'
         'No vendor software is needed on Mac/Linux. Use Python 3.11+ and Pillow 13 on the licensed Windows host.\n'
         'Return native-results/ and use receive with the original job. Native PNG/SMV/CSV are copied unchanged.\n'
@@ -195,7 +214,7 @@ def prepare(tool, plan_path, folder, name=None, include=()):
 def run(job, *, ad_exe=None, psim_dir=None, timeout=180):
     if os.name != 'nt':
         raise RuntimeError('run 需要装有相应软件的 Windows；Mac/Linux 使用 handoff 和 receive')
-    if not math_is_positive(timeout):
+    if not (math.isfinite(timeout) and timeout > 0):
         raise ValueError('timeout 须为有限正数')
     job = Path(job).resolve()
     request = read_json(job / REQUEST)
@@ -253,7 +272,7 @@ def run(job, *, ad_exe=None, psim_dir=None, timeout=180):
             stage('create', ['create', plan, project])
             schematic = project / f'{name}.SchDoc'
             if digest(schematic) != digest(job / f'prepared/{name}.SchDoc'):
-                raise RuntimeError('Windows 生成的 SchDoc 与移动端准备的文件字节不一致')
+                raise RuntimeError('Windows 生成的 SchDoc 与准备端生成的文件字节不一致')
             report['prepared_schdoc_byte_identical'] = True
             expected = project / 'expected.json'
             stage(
@@ -284,12 +303,6 @@ def run(job, *, ad_exe=None, psim_dir=None, timeout=180):
     report['files'] = inventory(output)
     write_json(output / RESULT, report)
     return dict(report, result_folder=str(output))
-
-
-def math_is_positive(value):
-    import math
-
-    return math.isfinite(value) and value > 0
 
 
 def receive(job, returned, output):

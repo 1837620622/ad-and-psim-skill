@@ -1,6 +1,6 @@
 {
   "name": "ad-and-psim-skill",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "description": "Altium Designer and PSIM agent skills: native modeling, layout checks, portable rendering, MCP server.",
   "license": "SEE LICENSE IN LICENSE",

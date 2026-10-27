@@ -7,7 +7,7 @@
 | 命令 | 作用 | 系统 |
 | --- | --- | --- |
 | `env` | 报告系统、Python、Pillow，以及是否找到 AD | 任何 |
-| `check PLAN [--preview PNG] [--strict]` | 排版预检；`--strict` 时 warning 也算失败 | 任何 |
+| `check PLAN [--preview FILE] [--strict]` | 排版预检；`--strict` 时 warning 也算失败；草图 `.svg` 只需标准库，`.png` 需要 resvg-py 或 Pillow | 任何 |
 | `create PLAN DIR` | 写出 `名称.SchDoc`、`名称.PrjPcb`、`expected.json`、`layout-check.json` | 任何 |
 | `import SCHDOC PLAN [--allow-partial]` | 现有 SchDoc 转计划；有无法表示的图元时默认不写出 | 任何 |
 | `edit PLAN OPS PLAN_OUT` | 按操作清单修改计划并预检 | 任何 |
@@ -82,7 +82,7 @@ AD 程序按顺序查找：`--ad-exe`、环境变量 `AD_EXE`、Windows 卸载�
 
 附加器件参数和可表示的元数据保留；无法重建的模型关联会报告为 unsupported，默认不写计划。导入、编辑和截图不允许输出覆盖输入。`export` 的文字检查未通过时返回非零状态，MCP 同样报告失败。
 
-移动端任务、原生预览接收和一致性等级见 [mobile-workflow.md](mobile-workflow.md)。
+交给 Windows 的任务、原生预览接收和一致性等级见 [handoff.md](handoff.md)。
 
 ## 原生脚本
 
