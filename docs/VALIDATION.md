@@ -8,26 +8,36 @@ This records the checks actually performed; it is not a guarantee for every desi
 
 | 项目 | 环境 | 结果 |
 | --- | --- | --- |
-| AD 自建 RC 图纸（上一版示例） | Altium Designer Enterprise 26.4.1，Windows | 创建、编译、重开、逐引脚网表、原生 EMF/PNG；8 个物理引脚的同网关系一致；0 error、4 warning |
-| PSIM 自建 RC 电路（上一版示例） | PSIM 2026.0.0.7209 原生 API，Windows | 创建、改参数、保存重开、求解、读回数据、关联文字出图；12 V、200 Ω、1 µF 零初值阶跃，2000 个输出点，与解析解最大偏差约 0.0001483 V |
-| 交付副本复开 | 同上 | 交付副本中的 AD 示例原生验证通过，PSIM 复算与原始数据一致 |
+| AD 当前 RC 图纸 | Altium Designer Enterprise 26.4.1，Windows | 创建、编译、重开、逐引脚网表、原生 EMF/PNG；8 个物理引脚的同网关系一致；0 error、4 个缺少封装的 warning；原生文字审查通过 |
+| PSIM 当前 RC 电路 | PSIM 2026.0.0.7209 原生 API，Windows | 10 V、100 Ω、1 µF 零初值阶跃；2000 个输出点；与 RC 解析解最大偏差约 0.000488484 V；原生文字审查通过 |
+| AD 移动任务执行与接收 | 自包含任务的 `run.bat`，同上 Windows 环境 | 从准备到原生编译、网表与出图全部通过；准备和执行端 SchDoc 字节相同；接收 PNG 与原生导出哈希相同 |
+| PSIM 移动任务执行与接收 | 自包含任务的 `run.bat`，同上 Windows 环境 | 原生创建、求解、出图及接收全部通过；返回 CSV 与直接调用 PSIM 的基准文件字节相同，2000 点、全部列、零容差比较通过 |
+| 修复后的共用节点移动 | PSIM 原生 API | 移动 C1 后 Vout 探头保持连接，原生求解通过，全部波形与基准数值相等 |
+| 中文批处理与中文原理图标注 | PSIM / AD，同上环境 | 中文包名完成创建、求解及出图；GBK 的“漏”字读写和 AD 原生文字保持正确 |
+| 附加参数导入重建 | AD，同上环境 | 隐藏 Tolerance=1% 参数保留；重建图纸原生编译、逐引脚网表通过 |
+| 原生出图失败传播 | AD / PSIM，同上环境 | 故意重叠位号和数值，两个 export 均返回 1；PSIM 批处理返回失败，不再打印 Done |
+| 自动发现与窗口截图 | 自定义盘符安装，同上环境 | 卸载注册表发现 X2.EXE 和 PSIM；实际打开 RC 文档并截到真实软件窗口 |
 | 技能发现 | Codex | 两项技能都被发现 |
 
-上一版示例的原生导出：[AD](images/ad-native-rc.png)、[PSIM](images/psim-native-rc.png)。
+当前示例的原生导出：[AD](images/ad-native-rc.png)、[PSIM](images/psim-native-rc.png)。AD 的 4 条封装 warning 不属于 PCB 制造验收通过。
 
-## 待在 Windows 上复验 / Pending native re-check
+## 一致性证据 / Identity evidence
 
-本次改动的以下部分在 Linux 上做了可移植测试，还需要在装有软件的 Windows 上跑一遍：
+AD 基础示例生成的 SchDoc SHA-256：
 
-| 改动 | 复验命令 | 要看什么 |
-| --- | --- | --- |
-| 新的 AD 示例布局；无源件热端对齐栅格；默认文字位置；导线在热端分段；CFB 空目录项；分区数随图幅变化 | `native_ad.py create assets/rc-filter-plan.json work` → `verify work/RC_Filter.PrjPcb out --expected work/expected.json` → `export work/RC_Filter.SchDoc drawing` | 编译 0 error，拓扑一致，`text_review.passed`，warning 数量 |
-| DelphiScript 失败时写 `Failed=` | 用不存在的文档路径运行 `export` | 立即报错而不是等到超时 |
-| PSIM 示例的文字位置、仿真控制位置、`1u` 写法 | `native_psim.py package assets/rc-filter-plan.json kit`，在 kit 里运行 `build.bat` | 创建、求解成功；`1u` 被解析为 1 µF；`text_review.passed` |
-| AD/PSIM 安装目录自动查找 | `native_ad.py env`、`native_psim.py env` | 能找到本机 X2.EXE 和 PSIM 目录 |
-| 窗口截图 | `native_ad.py screenshot X.SchDoc shot.png`，`native_psim.py screenshot X.psimsch shot.png` | 截到已加载文档的主窗口 |
+```text
+bd8a32b1df5075a3ebedfcc4c89ce5359bd79a0842b54bbfa27505f85180cedc
+```
 
-复验通过后，用新的原生导出替换上表链接的两张旧图。
+PSIM 当前 RC 基准 CSV 与移动任务返回 CSV 的 SHA-256 相同：
+
+```text
+08aca6ea5b6d6d6c5ba574f3b36784dd73c2f41c2b89ac13b91c9c44c87931a5
+```
+
+以上只针对该示例、当前模型与已列明的软件版本。原始 Time 从 1 µs 到约 2 ms，输出间隔约 1 µs；它是输出采样证据，不单独证明求解器内部步长。
+
+接收器复制 Windows 原生图片，不在移动端重绘。离线便携渲染仍有字体和未标定符号差异，不用它声称与所有原生图逐像素相同。
 
 ## 可移植测试 / Portable tests
 
@@ -35,18 +45,26 @@ This records the checks actually performed; it is not a guarantee for every desi
 python -m unittest discover -s tests -v
 ```
 
-不需要 AD 或 PSIM，在 Linux 上用 Python 3.10 和 3.13 运行，覆盖：
+无需 AD 或 PSIM。CI 配置 Windows、macOS、Linux 与 Python 3.10/3.13；本机 Windows/Python 3.12 已运行 84 项测试。覆盖：
 
 - 排版预检：两项示例 0 error、0 warning；悬空线、浮空标号、离栅格热端、隐式短接、不可编码字符等结构错误；文字重叠、穿件导线、四向连接、浮动标题、稀疏图面等版面问题；PSIM 的文字压符号、导线穿符号、仿真控制位置、参数写法。
 - SchDoc 读写：标准库读写复合文档；二进制引脚记录解码；示例生成文件的 SHA-256 固定（跨系统字节一致）；导入后重建的记录完全相同；各缩放比例下无源件热端在栅格上。
 - 编辑：移动器件后导线正交重连；PSIM 移动元件后导线绕开符号。
-- 便携渲染：输出 PNG 和 SVG。
+- 便携渲染：Pillow、resvg PNG 和 SVG；显式字体配置、PNG 来源信息与同一输入重复输出；后端比较见 [预览评测](preview-backends.md)。
 - EMF 审查：映射模式换算、文字被线穿过、圆形压字、单个字符不误报。
 - 波形测量：非均匀采样积分、RMS、V/I 乘积积分、储能、门极频率、无效 CSV。
 - MCP 服务器协议、两个安装器、交付目录分类、Windows 构建包。
 - README 中的命令流程，包括输出目录不存在时自动创建。
+- 输入输出同路径保护、报告不得覆盖已有文件或本次生成的计划/检查文件、附加参数保留、模型关联拒绝静默丢失、GBK/UTF-8 文字解码。
+- 移动端任务自包含、显式依赖、原生结果接收、文件被改动/请求错配/失败结果/路径越界拒收。
+- 文件哈希、完整 CSV、零容差与显式容差、时间网格差异和无效数据。
+- 安装器检查脚本变更；npm 包排除私有参考和字节码；交付保留输入目录已有的 manifest。
 
-另做过的人工对照：二进制引脚解码用公开的 AD 库文件样本核对过名称、编号、长度和方向；AD 便携渲染与上一版原生导出逐区对比，分区、连接点、地符号、引脚名和引脚号位置一致；PSIM 便携渲染与上一版原生导出对比，符号形状和位置一致，文字字形比原生略宽。
+另做过人工对照：二进制引脚解码用公开的 AD 库文件样本核对过名称、编号、长度和方向；当前两张原生全图与真实窗口均查看过。便携图用于布局近似，不能替代原生图片。
+
+MCP 1.2.0 已完成 29 工具枚举，并真实调用任务准备、AD/PSIM 原生结果接收和 CSV 比较；原生图片随 MCP 结果返回。Ruff、Markdown、技能元数据和打包白名单分别检查。
+
+安全检查使用 betterleaks 1.9.0 扫描 Git 历史与待发布文件，没有检出凭据泄漏；OSV Scanner 2.7.0 扫描固定依赖 resvg-py 0.5.0、Pillow 13.0.0，没有检出已知漏洞。旧 Pillow 的扫描有命中，因此 Python 3.10 的可选安装只包含 resvg，Windows 原生 PNG 转换使用 Python 3.11+。扫描结论只覆盖所列版本和公开扫描范围。
 
 ## 边界 / Limits
 
@@ -56,3 +74,4 @@ python -m unittest discover -s tests -v
 - 便携渲染是近似，不是原生导出。
 - 其他宿主只按目录适配，没有逐个运行完整电路任务。
 - 旧格式在新版中打开和旧版求解器实测是不同结论；没验证过的软件版本不在承诺范围内。
+- 未逐个演练所有 DelphiScript 异常、取消组合以及所有厂商库器件；复杂工程仍须按当前任务进行原生验证。

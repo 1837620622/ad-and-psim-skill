@@ -17,8 +17,11 @@
 | `export SCHDOC DIR [--dpi N]` | 原生导出 EMF 与 PNG，附文字审查 `text_review` | Windows + AD |
 | `run-script PAS PROCEDURE` | 运行本地 DelphiScript | Windows + AD |
 | `deliver WORK OUT [--name N] [--include 通配符]` | 生成客户目录与归档目录 | 任何 |
+| `handoff PLAN DIR [--name N] [--include 文件]` | 准备可交给 Windows 原生执行的完整任务 | 任何 |
+| `receive JOB RETURNED OUT` | 验证接收原生 PNG、工程与结果；不重绘 | 任何 |
+| `compare REFERENCE CANDIDATE [--waveforms]` | 比较文件字节或 CSV 数值，默认零容差 | 任何 |
 
-AD 程序按顺序查找：`--ad-exe`、环境变量 `AD_EXE`、`Program Files\Altium\*\X2.EXE` 中版本号最高的一个。
+AD 程序按顺序查找：`--ad-exe`、环境变量 `AD_EXE`、Windows 卸载注册表及常见 Altium 目录。注册表发现兼容自定义盘符；多个有效安装中选择版本号最高的一个。
 
 `check_layout.py`、`review_emf_text.py`、`compare_pin_nets.py`、`deliver.py`、`capture.py` 也可以单独运行，参数见各自的 `--help`。
 
@@ -77,6 +80,10 @@ AD 程序按顺序查找：`--ad-exe`、环境变量 `AD_EXE`、`Program Files\A
 
 `import` 生成的计划带 `pin_map`，记录导入时的连接；只改排版时，预检会确认连接没有变。导入只支持本生成器能重建的图元，带库图形或多部件的器件会列在 `unsupported` 里。
 
+附加器件参数和可表示的元数据保留；无法重建的模型关联会报告为 unsupported，默认不写计划。导入、编辑和截图不允许输出覆盖输入。`export` 的文字检查未通过时返回非零状态，MCP 同样报告失败。
+
+移动端任务、原生预览接收和一致性等级见 [mobile-workflow.md](mobile-workflow.md)。
+
 ## 原生脚本
 
 `verify` 和 `export` 把文档复制到 ASCII 临时目录，生成 DelphiScript 并通过 AD 命令行执行。脚本写出含 `Complete` 的状态文件表示完成，写出 `Failed=原因` 表示失败，启动器会立刻报错，不用等超时。自定义脚本用同一约定：
@@ -97,6 +104,8 @@ End;
 
 ## 截图
 
+`render` 的 PNG 后端可用 `--renderer auto|resvg|pillow` 选择。安装 `resvg-py==0.5.0` 后自动优先采用 resvg；可重复传 `--font-file` / `--font-dir`，并用 `--no-system-fonts` 限定字体来源。JSON 记录后端和显式字体文件哈希。字体选项仅用于 resvg PNG；SVG 的字体由查看器加载。便携图仍是近似；与实际 AD 图面一致的结果应接收 Windows 原生 PNG。
+
 `screenshot` 在 Windows 找到 AD 时：启动 AD 打开文档，等标题出现文档名，最大化，发送 Ctrl+PageDown（适合文档），截取整个窗口为 PNG。其他情况改用便携渲染，结果里 `source` 为 `portable_render`。要截已经打开的窗口：`python scripts/capture.py "Altium" shot.png`。
 
 ## MCP
@@ -109,4 +118,4 @@ python scripts/mcp_server.py --with ../../psim-simulation-layout/scripts   # 同
 npx -y github:1837620622/ad-and-psim-skill mcp       # 不用克隆仓库，需要 Node 18+
 ```
 
-工具：`ad_env`、`ad_check`、`ad_create`、`ad_import`、`ad_edit`、`ad_render`、`ad_screenshot`、`ad_verify`、`ad_export`、`ad_deliver`。计划和操作清单参数既可以是文件路径，也可以直接写 JSON 文本；渲染和截图结果会附带图片。各客户端的配置写法见仓库 README。
+工具：`ad_env`、`ad_check`、`ad_create`、`ad_import`、`ad_edit`、`ad_render`、`ad_screenshot`、`ad_verify`、`ad_export`、`ad_deliver`、`ad_handoff`、`ad_receive`、`ad_compare`。计划和操作清单参数既可以是文件路径，也可以直接写 JSON 文本；渲染和截图结果会附带图片。各客户端的配置写法见仓库 README。

@@ -1024,7 +1024,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('plan', type=Path, help='native_ad.py create 使用的 JSON 计划')
     parser.add_argument('--output', type=Path, help='写出完整 JSON 报告')
-    parser.add_argument('--preview', type=Path, help='写出 PNG 草图预览（需要 Pillow）')
+    parser.add_argument('--preview', type=Path, help='写出 PNG 草图预览（需要 resvg-py 或 Pillow）')
     parser.add_argument('--scale', type=float, default=4.0, help='预览像素/10mil，默认 4')
     parser.add_argument('--strict', action='store_true', help='warning 也视为未通过')
     args = parser.parse_args()

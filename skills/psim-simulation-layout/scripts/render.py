@@ -102,14 +102,14 @@ def _symbol(canvas, element, shift):
         circle(5, -6, 0.8)
 
 
-def render_plan(plan, target, scale=4.0, margin=20):
-    """渲染为 .svg 或 .png（PNG 需要 Pillow）；返回输出信息。"""
+def render_plan(plan, target, scale=4.0, margin=20, **canvas_options):
+    """渲染为 .svg 或 .png（PNG 可选 resvg-py 或 Pillow）；返回输出信息。"""
     x1, y1, x2, y2 = _bounds(plan)
     shift = (x1 - margin, y1 - margin)
     width, height = x2 - x1 + 2 * margin, y2 - y1 + 2 * margin
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    canvas = open_canvas(target, width, height, scale, '#ffffff', y_up=False)
+    canvas = open_canvas(target, width, height, scale, '#ffffff', y_up=False, **canvas_options)
     connections = Counter()
     wires = []
     for element in plan['elements']:
@@ -148,13 +148,16 @@ def render_plan(plan, target, scale=4.0, margin=20):
     return {
         'render': str(target.resolve()),
         'source': 'portable_render',
+        'renderer': canvas.renderer,
+        'native_verified': False,
+        'font_profile': canvas.font_profile,
         'pixel_size': list(getattr(canvas, 'final', canvas.size)),
         'note': '便携渲染，不是 PSIM 原生导出',
     }
 
 
-def render_file(source, target, scale=4.0):
+def render_file(source, target, scale=4.0, **canvas_options):
     source = Path(source)
     if source.suffix.lower() != '.json':
         raise ValueError('便携渲染读取建模计划 JSON；psimsch 是 PSIM 私有二进制格式，需在 Windows 上原生导出')
-    return render_plan(json.loads(source.read_text(encoding='utf-8-sig')), target, scale)
+    return render_plan(json.loads(source.read_text(encoding='utf-8-sig')), target, scale, **canvas_options)

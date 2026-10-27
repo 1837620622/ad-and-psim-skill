@@ -9,10 +9,25 @@ def _schema(properties, required=()):
 
 PATH = {'type': 'string', 'description': '文件或目录路径（相对路径按 MCP 服务器的工作目录解析）'}
 PLAN = {'type': 'string', 'description': '建模计划 JSON 文件路径，或直接写 JSON 文本'}
+RENDER_OPTIONS = {
+    'renderer': {'type': 'string', 'enum': ['auto', 'resvg', 'pillow']},
+    'font_files': {'type': 'array', 'items': {'type': 'string'}},
+    'font_dirs': {'type': 'array', 'items': {'type': 'string'}},
+    'no_system_fonts': {'type': 'boolean'},
+}
 
 
 def _optional(arguments, flag, key):
     return [flag, str(arguments[key])] if arguments.get(key) not in (None, '') else []
+
+
+def _render_options(arguments):
+    return [
+        *_optional(arguments, '--renderer', 'renderer'),
+        *[v for p in arguments.get('font_files', []) for v in ('--font-file', p)],
+        *[v for p in arguments.get('font_dirs', []) for v in ('--font-dir', p)],
+        *(['--no-system-fonts'] if arguments.get('no_system_fonts') else []),
+    ]
 
 
 def _waveform(a, m):
@@ -40,6 +55,62 @@ def _waveform(a, m):
 
 
 TOOLS = [
+    {
+        'name': 'psim_handoff',
+        'description': 'Prepare an offline Windows execution job from a plan on Mac/Linux/Windows. '
+        'Windows run.bat creates, simulates and exports through the installed PSIM, preserving original data.',
+        'script': 'native_job.py',
+        'schema': _schema(
+            {
+                'plan': PLAN,
+                'folder': PATH,
+                'name': {'type': 'string'},
+                'include': {'type': 'array', 'items': {'type': 'string'}},
+            },
+            ['plan', 'folder'],
+        ),
+        'args': lambda a, m: [
+            'prepare',
+            'psim',
+            m(a['plan']),
+            a['folder'],
+            *_optional(a, '--name', 'name'),
+            *[v for p in a.get('include', []) for v in ('--include', p)],
+        ],
+    },
+    {
+        'name': 'psim_receive',
+        'description': 'Verify and receive returned Windows results against the original job. '
+        'Copies the native PNG, SMV and CSV unchanged. Refuses failed or modified results.',
+        'script': 'native_job.py',
+        'schema': _schema({'job': PATH, 'returned': PATH, 'output': PATH}, ['job', 'returned', 'output']),
+        'args': lambda a, m: ['receive', a['job'], a['returned'], a['output']],
+    },
+    {
+        'name': 'psim_compare',
+        'description': 'Compare file SHA-256 hashes, or CSV signals on the original time grids. '
+        'Reports byte identity, numerical equality or tolerance agreement separately. Does not run a solver.',
+        'script': 'compare_results.py',
+        'schema': _schema(
+            {
+                'reference': PATH,
+                'candidate': PATH,
+                'waveforms': {'type': 'boolean'},
+                'atol': {'type': 'number'},
+                'rtol': {'type': 'number'},
+                'time_atol': {'type': 'number'},
+            },
+            ['reference', 'candidate'],
+        ),
+        'args': lambda a, m: [
+            a['reference'],
+            a['candidate'],
+            *(['--waveforms'] if a.get('waveforms') else []),
+            *_optional(a, '--atol', 'atol'),
+            *_optional(a, '--rtol', 'rtol'),
+            *_optional(a, '--time-atol', 'time_atol'),
+        ],
+    },
     {
         'name': 'psim_env',
         'description': 'Report OS, Python, Pillow and whether PSIM with its Python API is available.',
@@ -73,8 +144,16 @@ TOOLS = [
         'name': 'psim_render',
         'description': 'Portable render of a PSIM plan to PNG/SVG in PSIM style (no PSIM needed). '
         'A preview for debugging, not a native export.',
-        'schema': _schema({'plan': PLAN, 'target': PATH, 'scale': {'type': 'number'}}, ['plan', 'target']),
-        'args': lambda a, m: ['render', m(a['plan']), a['target'], *_optional(a, '--scale', 'scale')],
+        'schema': _schema(
+            {'plan': PLAN, 'target': PATH, 'scale': {'type': 'number'}, **RENDER_OPTIONS}, ['plan', 'target']
+        ),
+        'args': lambda a, m: [
+            'render',
+            m(a['plan']),
+            a['target'],
+            *_optional(a, '--scale', 'scale'),
+            *_render_options(a),
+        ],
     },
     {
         'name': 'psim_package',

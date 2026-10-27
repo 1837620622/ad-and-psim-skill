@@ -13,6 +13,9 @@
 | `package PLAN DIR [--name N]` | 生成 Windows 构建包 | 任何 |
 | `screenshot SOURCE OUT` | 有 PSIM 且给的是 psimsch：打开软件截窗口；否则渲染计划 | 任何 |
 | `deliver WORK OUT [--name N] [--include 通配符]` | 生成客户目录与归档目录 | 任何 |
+| `handoff PLAN DIR [--name N] [--include 文件]` | 准备可校验的 Windows 原生执行任务 | 任何 |
+| `receive JOB RETURNED OUT` | 校验接收原生 PNG、SMV/CSV 和模型 | 任何 |
+| `compare REFERENCE CANDIDATE [--waveforms]` | 比较文件哈希或原始 CSV 数值，默认零容差 | 任何 |
 | `version` | 原生 API 版本 | Windows + PSIM |
 | `inspect PSIMSCH` | 读取元件类型、名称和参数 | Windows + PSIM |
 | `create PLAN PSIMSCH [--overwrite]` | 按计划创建原生模型（先跑预检） | Windows + PSIM |
@@ -21,7 +24,7 @@
 | `export PSIMSCH OUT.emf [--dpi N]` | 原生出图：EMF、完整 PNG、去白边 PNG 和 `text_review` | Windows + PSIM |
 | `to-python PSIMSCH OUT.py` | 用本机 ConvertToPythonW 导出可重建脚本（只导出不执行） | Windows + PSIM |
 
-PSIM 安装目录按顺序查找：`--psim-dir`、环境变量 `PSIM_DIR`、`C:\Altair`、`C:\Powersim`、`C:\Siemens` 和 Program Files 下名字含 PSIM 的目录；目录里须有 `PSIM2.dll` 和 `Python/Samples/Psim_Class.py`。
+PSIM 安装目录按顺序查找：`--psim-dir`、环境变量 `PSIM_DIR`、Windows 卸载注册表与常见 Altair/Powersim/Siemens 目录；目录里须有 `PSIM2.dll` 和 `Python/Samples/Psim_Class.py`。支持通过注册表发现自定义盘符的安装。
 
 输出已存在时默认不覆盖；每次仿真用新目录，避免把旧结果当新结果。
 
@@ -71,6 +74,8 @@ PSIM 安装目录按顺序查找：`--psim-dir`、环境变量 `PSIM_DIR`、`C:\
 | `add_wire` / `remove_wire` | `from`、`to` / `at` | `remove_wire` 删除端点在该点的导线 |
 | `shift_all` | `dx`、`dy` | 整体平移 |
 
+移动元件时保留共用节点上的探头和其他端口；移动前后比较已知端口的同网伙伴，发生意外断接或短接时拒绝保存。未标定器件只知道首端口，仍需原生核验。
+
 ## Windows 构建包
 
 `package plan.json kit/` 生成：
@@ -79,18 +84,22 @@ PSIM 安装目录按顺序查找：`--psim-dir`、环境变量 `PSIM_DIR`、`C:\
 kit/
 ├── build.bat            # 双击：create → simulate → export
 ├── plan.json
-├── tools/               # native_psim.py、check_layout.py、psim_plan.py、review_emf_text.py
+├── tools/               # 自包含的 Python 执行工具
 ├── README.txt
-└── preview.render.png   # 便携渲染预览（有 Pillow 时）
+└── preview.render.png   # 便携渲染预览（有 resvg-py 或 Pillow 时）
 ```
 
-在装有 PSIM 和 Python 3.10+ 的 Windows 电脑上双击 `build.bat`，得到 `名称.psimsch`、`result\`（SMV、CSV）和 `drawing\`（EMF、PNG）。找不到 PSIM 时先设置 `PSIM_DIR`。
+在装有 PSIM、Python 3.11+ 和 Pillow 13 的 Windows 电脑上双击 `build.bat`，得到 `名称.psimsch`、`result\`（SMV、CSV）和 `drawing\`（EMF、PNG）。找不到 PSIM 时先设置 `PSIM_DIR`。
+
+名称支持中文，批处理使用 UTF-8。原生文字检查失败时整个构建返回失败。需要回传校验、与移动端一致的原生预览及请求对应关系时，改用 [handoff / receive](mobile-workflow.md)。
 
 ## 复杂模型与已有图
 
 `to-python` 导出的脚本包含位置、方向、端口、模型和 TEXTLINK 字段，可用来校准当前版本。在副本里改明确的 AREA、PORTS、线端和文字位置，用本机 PSIM 的 Python 模块和新的输出路径运行。参数文件、子电路、DLL 和器件损耗库要一并核对；转换可能丢失版本特有的属性，要比较原模型和副本，不能宣称无损。只需微调文字时，优先改原生关联文字的位置。
 
 ## 截图
+
+`render` 的 PNG 后端可用 `--renderer auto|resvg|pillow` 选择。安装 `resvg-py==0.5.0` 后自动优先采用 resvg；可重复传 `--font-file` / `--font-dir`，并用 `--no-system-fonts` 限定字体来源。JSON 记录后端和显式字体文件哈希。字体选项仅用于 resvg PNG；SVG 的字体由查看器加载。该后端不求解电路；与实际 PSIM 图面一致的结果应接收 Windows 原生 PNG。
 
 `screenshot` 在 Windows 找到 PSIM 且输入是 psimsch 时：启动 PSIM 打开模型，等窗口标题出现模型名，最大化后截取整个窗口。其他情况按计划 JSON 便携渲染，结果里 `source` 为 `portable_render`。截已打开的窗口：`python scripts/capture.py "PSIM" shot.png`。
 
@@ -104,4 +113,4 @@ python scripts/mcp_server.py --with ../../ad-schematic-layout/scripts   # 同时
 npx -y github:1837620622/ad-and-psim-skill mcp       # 不用克隆仓库，需要 Node 18+
 ```
 
-工具：`psim_env`、`psim_check`、`psim_plan_edit`、`psim_render`、`psim_package`、`psim_screenshot`、`psim_create`、`psim_inspect`、`psim_edit`、`psim_simulate`、`psim_export`、`psim_measure`、`psim_deliver`。计划、操作清单和修改清单参数既可以是文件路径，也可以直接写 JSON 文本；渲染和截图结果会附带图片。各客户端的配置写法见仓库 README。
+工具：`psim_env`、`psim_check`、`psim_plan_edit`、`psim_render`、`psim_package`、`psim_screenshot`、`psim_create`、`psim_inspect`、`psim_edit`、`psim_simulate`、`psim_export`、`psim_measure`、`psim_deliver`、`psim_handoff`、`psim_receive`、`psim_compare`。计划、操作清单和修改清单参数既可以是文件路径，也可以直接写 JSON 文本；渲染和截图结果会附带图片。各客户端的配置写法见仓库 README。

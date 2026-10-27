@@ -20,7 +20,22 @@ import struct
 import sys
 
 HERE = Path(__file__).resolve().parent
-PACKAGE_TOOLS = ('native_psim.py', 'check_layout.py', 'psim_plan.py', 'review_emf_text.py')
+PACKAGE_TOOLS = (
+    'native_psim.py',
+    'check_layout.py',
+    'psim_plan.py',
+    'review_emf_text.py',
+    'native_job.py',
+    'compare_results.py',
+    'render.py',
+    'canvas.py',
+    'capture.py',
+    'analyze_waveform.py',
+    'deliver.py',
+    'mcp_server.py',
+    'mcp_tools.py',
+    'native_discovery.py',
+)
 
 
 def write_json(path, data):
@@ -59,6 +74,9 @@ def find_psim(explicit=None):
         for d in [root, *root.glob('*'), *root.glob('*/*')]
         if 'psim' in str(d).lower() and _valid(d)
     ]
+    from native_discovery import installed_locations
+
+    found.extend(path for path in installed_locations(r'PSIM') if path.is_dir() and _valid(path))
     return max(found, key=lambda d: [int(n) for n in re.findall(r'\d+', str(d))] or [0]) if found else None
 
 
@@ -394,6 +412,7 @@ def export(psim, source, target, dpi=120):
 
 BUILD_BAT = r"""@echo off
 rem Run on a Windows PC with PSIM: PSIM writes the native model, solves it and exports the drawing.
+chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 set "PY=py -3"
@@ -416,17 +435,18 @@ PACKAGE_README = """{name} - PSIM 构建包 / PSIM build kit
 1. 由 PSIM 原生接口按 plan.json 写出 {name}.psimsch；
 2. 原生求解，结果写入 result\\（SMV 与 CSV）；
 3. 原生出图，写入 drawing\\（EMF、PNG）。
-找不到 PSIM 时先设置环境变量 PSIM_DIR 为安装目录。需要 Python 3.10 以上。
+找不到 PSIM 时先设置环境变量 PSIM_DIR 为安装目录。原生 PNG 需要 Python 3.11+ 和 Pillow 13。
 
 On a Windows PC with PSIM, double-click build.bat. It writes {name}.psimsch through PSIM's own API,
-runs the solver (result\\) and exports the drawing (drawing\\). Set PSIM_DIR if PSIM is not found.
+runs the solver (result\\) and exports the drawing (drawing\\). Native PNG needs Python 3.11+ and Pillow 13.
+Set PSIM_DIR if PSIM is not found.
 
 preview.render.png 是便携渲染的预览，不是 PSIM 原生导出。
 """
 
 
 def package(plan_path, folder, name=None):
-    """生成 Windows 构建包：PSIM 自己写出的文件才能保证在任何 PSIM 上打开一致。"""
+    """生成 Windows 构建包，由目标版本 PSIM 自己写出文件并求解。"""
     plan_path, folder = Path(plan_path).resolve(), Path(folder).resolve()
     plan = read_json(plan_path)
     validate(plan)
@@ -440,14 +460,17 @@ def package(plan_path, folder, name=None):
     write_json(folder / 'plan.json', plan)
     for tool in PACKAGE_TOOLS:
         shutil.copy2(HERE / tool, folder / 'tools' / tool)
-    (folder / 'build.bat').write_bytes(BUILD_BAT.replace('{name}', name).replace('\n', '\r\n').encode('ascii'))
+    for filename in ('LICENSE', 'THIRD_PARTY_NOTICES.md'):
+        if (HERE.parent / filename).is_file():
+            shutil.copy2(HERE.parent / filename, folder / filename)
+    (folder / 'build.bat').write_bytes(BUILD_BAT.replace('{name}', name).replace('\n', '\r\n').encode('utf-8'))
     (folder / 'README.txt').write_bytes(PACKAGE_README.format(name=name).replace('\n', '\r\n').encode('utf-8-sig'))
     try:
         from render import render_plan
 
         render_plan(plan, folder / 'preview.render.png')
     except ImportError:
-        pass  # 没有 Pillow 时不生成预览，构建包本身不受影响
+        pass  # 没有可选 PNG 后端时不生成预览，构建包本身不受影响
     return {
         'package': str(folder),
         'name': name,
@@ -489,7 +512,7 @@ def environment(psim_dir=None):
         'pillow': pillow,
         'psim_dir': str(directory) if directory else None,
         'native_available': os.name == 'nt' and directory is not None,
-        'portable_commands': ['check', 'plan-edit', 'render', 'package', 'deliver'],
+        'portable_commands': ['check', 'plan-edit', 'render', 'package', 'handoff', 'receive', 'compare', 'deliver'],
         'native_commands': [
             'version',
             'inspect',
@@ -511,6 +534,17 @@ def main():
     parser.add_argument('--psim-dir', type=Path, help='PSIM 安装目录；默认读 PSIM_DIR 或自动查找')
     parser.add_argument('--report', type=Path, help='把结果 JSON 另存到文件')
     sub = parser.add_subparsers(dest='command', required=True)
+    item = sub.add_parser('handoff', help='准备可交给 Windows 原生执行的完整任务')
+    item.add_argument('plan', type=Path)
+    item.add_argument('folder', type=Path)
+    item.add_argument('--name')
+    item.add_argument('--include', action='append', default=[])
+    item = sub.add_parser('receive', help='接收 Windows 原生图纸和结果，校验文件哈希')
+    item.add_argument('job', type=Path)
+    item.add_argument('returned', type=Path)
+    item.add_argument('output', type=Path)
+    item = sub.add_parser('compare', help='比较原生文件哈希或 CSV 波形（不需要 PSIM）')
+    item.add_argument('arguments', nargs=argparse.REMAINDER)
     sub.add_parser('env', help='报告系统、Python、Pillow 与 PSIM 可用性')
     item = sub.add_parser('check', help='排版预检')
     item.add_argument('plan', type=Path)
@@ -523,6 +557,9 @@ def main():
     item.add_argument('plan', type=Path)
     item.add_argument('target', type=Path)
     item.add_argument('--scale', type=float, default=4.0)
+    from canvas import add_renderer_arguments
+
+    add_renderer_arguments(item)
     item = sub.add_parser('package', help='生成 Windows 一键构建包')
     item.add_argument('plan', type=Path)
     item.add_argument('folder', type=Path)
@@ -560,13 +597,29 @@ def main():
     item.add_argument('--dpi', type=int, default=120)
     args = parser.parse_args()
     try:
+        if args.command == 'plan-edit' and args.output.resolve() in (args.plan.resolve(), args.operations.resolve()):
+            raise ValueError('输出路径不能覆盖输入文件')
+        if args.command == 'screenshot':
+            if args.target.resolve() == args.source.resolve():
+                raise ValueError('输出路径不能覆盖输入文件')
+            if args.target.suffix.lower() != '.png':
+                raise ValueError('截图输出须为 .png')
         if args.report:
+            if args.report.suffix.lower() != '.json':
+                raise ValueError('报告输出须为 .json，不能占用工程或图片文件')
+            if args.report.exists():
+                raise FileExistsError('报告路径已存在，请使用新的路径')
             inputs = [
-                getattr(args, k, None) for k in ('source', 'plan', 'changes', 'parameters', 'target', 'operations')
+                getattr(args, k, None)
+                for k in ('source', 'plan', 'changes', 'parameters', 'target', 'operations', 'output')
             ]
             if args.report.resolve() in [p.resolve() for p in inputs if p]:
                 raise ValueError('报告不能覆盖输入或输出文件')
         command, failed = args.command, False
+        if command == 'compare':
+            from compare_results import main as compare_main
+
+            return compare_main(args.arguments + (['--output', str(args.report)] if args.report else []))
         if command == 'env':
             data = environment(args.psim_dir)
         elif command == 'check':
@@ -588,9 +641,10 @@ def main():
             }
             failed = bool(check['summary']['errors'])
         elif command == 'render':
+            from canvas import renderer_arguments
             from render import render_file
 
-            data = render_file(args.plan, args.target, args.scale)
+            data = render_file(args.plan, args.target, args.scale, **renderer_arguments(args))
         elif command == 'package':
             data = package(args.plan, args.folder, args.name)
         elif command == 'screenshot':
@@ -599,6 +653,14 @@ def main():
             from deliver import deliver
 
             data = deliver(args.work, args.output, args.name, args.include)
+        elif command == 'handoff':
+            from native_job import prepare
+
+            data = prepare('psim', args.plan, args.folder, args.name, args.include)
+        elif command == 'receive':
+            from native_job import receive
+
+            data = receive(args.job, args.returned, args.output)
         else:
             plan = read_json(args.plan) if command == 'create' else None
             layout = precheck(plan) if plan is not None else None
@@ -624,8 +686,11 @@ def main():
                 if not 20 <= args.dpi <= 600:
                     raise ValueError('dpi 须在 20–600 之间')
                 data = export(psim, args.source, args.target, args.dpi)
+                failed = not data['text_review'].get('passed', False)
         text = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False)
         if args.report:
+            if args.report.exists():
+                raise FileExistsError('报告路径与本次生成的文件冲突，未覆盖生成文件')
             Path(args.report).parent.mkdir(parents=True, exist_ok=True)
             Path(args.report).write_text(text + '\n', encoding='utf-8', newline='\n')
         print(text)

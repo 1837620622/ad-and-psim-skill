@@ -4,6 +4,7 @@ SYMBOLS 中的几何按 PSIM 2026 原生导出标定（DIRECTION=0，相对首�
 """
 
 import copy
+from collections import defaultdict
 import re
 
 SYMBOLS = {
@@ -88,6 +89,57 @@ def wire_points(element):
     return (float(a['X1']), float(a['Y1'])), (float(a['X2']), float(a['Y2']))
 
 
+def on_segment(p, segment):
+    a, b = segment
+    return (
+        a[0] == b[0] == p[0]
+        and min(a[1], b[1]) <= p[1] <= max(a[1], b[1])
+        or a[1] == b[1] == p[1]
+        and min(a[0], b[0]) <= p[0] <= max(a[0], b[0])
+    )
+
+
+def port_nets(plan):
+    """已知端口的同网伙伴；未标定器件仅有首端口，不能取代原生网表。"""
+    parent, names, counts, grounds = {}, {}, defaultdict(int), []
+
+    def find(p):
+        parent.setdefault(p, p)
+        while parent[p] != p:
+            parent[p] = parent[parent[p]]
+            p = parent[p]
+        return p
+
+    def union(a, b):
+        parent[find(a)] = find(b)
+
+    wires = []
+    for e in plan['elements']:
+        if kind(e) == 'WIRE':
+            a, b = wire_points(e)
+            wires.append((a, b))
+            union(a, b)
+            continue
+        prefix = f'{kind(e)}:{e.get("name", "")}'
+        counts[prefix] += 1
+        for number, p in enumerate(ports(e), 1):
+            names[f'{prefix}#{counts[prefix]}.{number}'] = p
+            find(p)
+            if kind(e) == 'GROUND':
+                grounds.append(p)
+    points = list(parent)
+    for segment in wires:
+        for p in points:
+            if on_segment(p, segment):
+                union(segment[0], p)
+    for p in grounds[1:]:
+        union(grounds[0], p)
+    groups = defaultdict(list)
+    for name, p in names.items():
+        groups[find(p)].append(name)
+    return {name: tuple(sorted(groups[find(p)])) for name, p in names.items()}
+
+
 def make_wire(a, b):
     def number(v):
         return int(v) if float(v).is_integer() else v
@@ -155,22 +207,38 @@ def apply_edits(plan, operations):
         action = op.get('op')
         if action == 'move':
             element = _find(plan, op)
+            before = port_nets(plan)
             dx, dy = op.get('dx', 0), op.get('dy', 0)
             if 'to' in op:
                 current = origin(element)
                 dx, dy = op['to'][0] - current[0], op['to'][1] - current[1]
             attached = set(ports(element))
+            old_wires = [wire_points(e) for e in elements if kind(e) == 'WIRE']
+            stationary_ports = {p for e in elements if e is not element and kind(e) != 'WIRE' for p in ports(e)}
+            shared = {
+                p
+                for p in attached
+                if p in stationary_ports
+                or any(on_segment(p, w) and p not in w for w in old_wires)
+                or sum(p in w for w in old_wires) > 1
+            }
             _shift_element(element, dx, dy)
             obstacles = [box for box in map(symbol_box, elements) if box]
             moved = []
             for wire in [e for e in elements if kind(e) == 'WIRE']:
                 a, b = wire_points(wire)
-                if a in attached or b in attached:
-                    a = (a[0] + dx, a[1] + dy) if a in attached else a
-                    b = (b[0] + dx, b[1] + dy) if b in attached else b
+                dragged = attached - shared
+                if a in dragged or b in dragged:
+                    a = (a[0] + dx, a[1] + dy) if a in dragged else a
+                    b = (b[0] + dx, b[1] + dy) if b in dragged else b
                     elements.remove(wire)
                     moved += square(a, b, obstacles)
             elements.extend(moved)
+            if dx or dy:
+                for p in sorted(shared):
+                    elements.extend(square((p[0] + dx, p[1] + dy), p, obstacles))
+            if port_nets(plan) != before:
+                raise ValueError('移动后的已知端口拓扑发生变化，未保存；请调整位置或走线')
         elif action == 'set':
             _find(plan, op).setdefault('attributes', {})[op['field']] = op['value']
         elif action == 'move_text':

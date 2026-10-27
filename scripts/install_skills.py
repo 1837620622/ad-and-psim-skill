@@ -29,6 +29,24 @@ AGENTS = {
 DEFAULT = ('universal', 'claude')
 
 
+def excluded(relative):
+    return (
+        '__pycache__' in relative.parts
+        or relative.suffix == '.pyc'
+        or relative.name == MARKER
+        or relative.parts[:2] in (('references', 'images'), ('references', 'professional'))
+    )
+
+
+def skill_files(directory):
+    """比较整个可分发技能，而不是只比较入口 Markdown。"""
+    return {
+        p.relative_to(directory).as_posix(): p.read_bytes()
+        for p in directory.rglob('*')
+        if p.is_file() and not excluded(p.relative_to(directory))
+    }
+
+
 def ours(target, source):
     if target.is_symlink() or (os.name == 'nt' and target.is_dir() and target.resolve() != target):
         return target.resolve() == source.resolve()
@@ -76,7 +94,7 @@ def install(base, mode, check=False, uninstall=False):
             elif check:
                 if not exists:
                     raise FileNotFoundError('未安装')
-                if (target / 'SKILL.md').read_bytes() != (source / 'SKILL.md').read_bytes():
+                if skill_files(target) != skill_files(source):
                     raise RuntimeError('已安装版本与当前仓库不同，重新运行安装即可更新')
                 record['status'] = 'ok'
             else:
@@ -88,7 +106,13 @@ def install(base, mode, check=False, uninstall=False):
                 if mode == 'link':
                     link(target, source)
                 else:
-                    shutil.copytree(source, target, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+                    shutil.copytree(
+                        source,
+                        target,
+                        ignore=lambda directory, names, source=source: [
+                            n for n in names if excluded((Path(directory) / n).relative_to(source))
+                        ],
+                    )
                     (target / MARKER).write_text(f'{ROOT}\n', encoding='utf-8')
                 record['status'] = 'installed'
             record['passed'] = True

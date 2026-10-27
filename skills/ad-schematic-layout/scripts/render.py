@@ -204,8 +204,8 @@ def _auto_junctions(records):
     return {p for p in anchors if p not in stored and any(inside(p, s) for s in wires)}
 
 
-def render_records(records, target, scale=4.0, zones=True):
-    """渲染为 .svg 或 .png（PNG 需要 Pillow）；返回输出信息。"""
+def render_records(records, target, scale=4.0, zones=True, **canvas_options):
+    """渲染为 .svg 或 .png（PNG 可选 resvg-py 或 Pillow）；返回输出信息。"""
     from plan_tools import sheet_size
 
     sheet = records[1]
@@ -213,7 +213,7 @@ def render_records(records, target, scale=4.0, zones=True):
     background = color(sheet.get('AREACOLOR', 16777215))
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    canvas = open_canvas(target, width, height, scale, background)
+    canvas = open_canvas(target, width, height, scale, background, **canvas_options)
     if zones:
         _zones(canvas, sheet, width, height)
     parts = {str(i - 1): r for i, r in enumerate(records) if r.get('RECORD') == '1'}
@@ -302,12 +302,15 @@ def render_records(records, target, scale=4.0, zones=True):
     return {
         'render': str(target.resolve()),
         'source': 'portable_render',
+        'renderer': canvas.renderer,
+        'native_verified': False,
+        'font_profile': canvas.font_profile,
         'pixel_size': list(getattr(canvas, 'final', canvas.size)),
         'note': '便携渲染，不是 AD 原生导出',
     }
 
 
-def render_file(source, target, scale=4.0):
+def render_file(source, target, scale=4.0, **canvas_options):
     """source 可为 SchDoc 或计划 JSON。"""
     import json
 
@@ -319,4 +322,4 @@ def render_file(source, target, scale=4.0):
         records = build(json.loads(source.read_text(encoding='utf-8-sig'))).records
     else:
         records = read(source)
-    return render_records(records, target, scale)
+    return render_records(records, target, scale, **canvas_options)

@@ -5,8 +5,8 @@
 ## 维护约定
 
 - 每个技能目录自成一体：脚本只引用同目录的模块，复制到任何 Agent 的技能目录都能运行。
-- 两项技能共用的 `canvas.py`、`capture.py`、`deliver.py`、`mcp_server.py`、`review_emf_text.py` 各放一份相同的副本，改一处就同步另一处；测试会检查两份一致。
-- 脚本只用 Python 3.10+ 标准库，Pillow 可选。代码风格按 `ruff.toml`，提交前运行：
+- 两项技能共用的 `canvas.py`、`capture.py`、`deliver.py`、`mcp_server.py`、`review_emf_text.py`、`compare_results.py`、`native_job.py`、`native_discovery.py` 各放一份相同的副本，改一处就同步另一处；测试会检查两份一致。
+- 脚本核心只用 Python 3.10+ 标准库；Pillow 与 resvg-py 为可选图像后端。代码风格按 `ruff.toml`，提交前运行：
 
 ```bash
 ruff format skills scripts tests && ruff check skills scripts tests
@@ -20,6 +20,8 @@ npx markdownlint-cli2 "**/*.md"
 ## 原生工程与图面
 
 只改排版时保留器件参数和逐端口连接。先看客户或官方参考，再定比例、分区和局部接线；看完整导出和关键区域，不能用自动检查代替看图。仿真结果必须来自实际求解器。
+
+移动端通过 `handoff` 准备任务，由 Windows 的 `run.bat` 原生执行，再通过 `receive` 验证接收。原生预览按字节复制，不在 Mac/Linux 重绘。离线便携预览仍是近似图，不声明为原生图或 PSIM 求解。
 
 ## 发布与资料
 

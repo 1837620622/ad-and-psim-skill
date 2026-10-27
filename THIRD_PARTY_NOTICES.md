@@ -31,4 +31,4 @@ External materials remain subject to their original terms. Public accessibility 
 
 The layout checker embeds advance-width values measured from the metric-compatible Liberation Serif font (SIL Open Font License 1.1); no font files are distributed.
 
-Pillow 等可选依赖由使用者环境提供，按各自许可使用，不随本仓库捆绑。用户仍需自行取得 AD、PSIM 和实际使用的模型或库所需的授权。
+Pillow、resvg-py（MIT）等可选依赖由使用者环境提供，按各自许可使用，不随本仓库捆绑。altium-monkey（AGPL-3.0-or-later）仅作为独立评测候选，不属于本项目依赖或分发内容。用户仍需自行取得 AD、PSIM 和实际使用的模型或库所需的授权。

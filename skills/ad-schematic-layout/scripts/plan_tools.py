@@ -13,8 +13,18 @@ PASSIVES = {'R', 'C', 'L', 'Y'}
 DIRECTION_NAMES = ('right', 'up', 'left', 'down')
 ELECTRICAL_NAMES = {0: 'input', 1: 'bidirectional', 2: 'output', 3: 'open_collector', 4: 'passive', 7: 'power'}
 GROUND_STYLES = {'4', '5', '6'}
-# 不影响图面的记录：图纸、文档参数和封装/模型关联。
-IGNORED = ('31', '41', '44', '45', '46', '47', '48')
+# 模型关联无法由基础生成器重建，不能静默丢弃。
+IGNORED = ('31', '41')
+PART_METADATA = (
+    'LIBREFERENCE',
+    'LIBRARYPATH',
+    'SOURCELIBRARYNAME',
+    'SHEETPARTFILENAME',
+    'TARGETFILENAME',
+    'DESIGNITEMID',
+    'UNIQUEID',
+    'COMPONENTDESCRIPTION',
+)
 # AD 标准图幅（10 mil），按 SHEETSTYLE 编号。
 SHEET_SIZES = (
     (1150, 760),
@@ -154,7 +164,7 @@ def import_records(records, name='Imported'):
                         'name': p.get('NAME', ''),
                         'at': [_number(v) for v in point(p)],
                         'direction': DIRECTION_NAMES[int(p['PINCONGLOMERATE']) & 3],
-                        'electrical': ELECTRICAL_NAMES.get(int(p.get('ELECTRICAL', 4)), 'passive'),
+                        'electrical': ELECTRICAL_NAMES.get(int(p.get('ELECTRICAL', 4)), int(p.get('ELECTRICAL', 4))),
                     }
                     for p in pins
                 ],
@@ -165,6 +175,12 @@ def import_records(records, name='Imported'):
             unsupported.append({'ref': ref, 'reason': '符号图形无法用计划表示'})
             continue
         part.update(texts)
+        parameters = [copy.deepcopy(c) for c in children if c.get('RECORD') == '41' and c.get('NAME') != 'Comment']
+        if parameters:
+            part['parameters'] = parameters
+        native_properties = {key: record[key] for key in PART_METADATA if key in record}
+        if native_properties:
+            part['native_properties'] = native_properties
         plan['parts'].append(part)
         for p in pins:
             hot = tuple(_number(v) for v in pin_end(p))
@@ -251,6 +267,11 @@ def _move_part(part, dx, dy):
     for key in ('designator_at', 'comment_at'):
         if key in part:
             part[key] = _shift(part[key], dx, dy)
+    for parameter in part.get('parameters', []):
+        for axis, delta in (('X', dx), ('Y', dy)):
+            field = 'LOCATION.' + axis
+            if field in parameter:
+                parameter[field] = str(_number(float(parameter[field]) + delta))
 
 
 def _rename_refs(plan, old, new):

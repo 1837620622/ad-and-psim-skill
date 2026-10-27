@@ -33,12 +33,19 @@ def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8-sig'))
 
 
+def protect_output(target, *sources):
+    """输出不能覆盖输入，避免把原生工程误写成计划或图片。"""
+    target = Path(target).resolve()
+    if target in {Path(source).resolve() for source in sources if source is not None}:
+        raise ValueError('输出路径不能覆盖输入文件')
+
+
 # ------------------------------------------------------------------ 建模 ----
 
 
 def build(plan):
     """把建模计划转换为内存中的图纸记录，不写文件；create、预检和渲染共用。"""
-    from plan_tools import pin_axes, route
+    from plan_tools import PART_METADATA, pin_axes, route
     from schdoc import Sheet, pin_end
     from tidy_wires import tidy
 
@@ -91,7 +98,9 @@ def build(plan):
                         p.get('name', ''),
                         *p['at'],
                         DIRECTIONS[p['direction']],
-                        ELECTRICAL[p.get('electrical', 'passive')],
+                        p['electrical']
+                        if isinstance(p.get('electrical'), int)
+                        else ELECTRICAL[p.get('electrical', 'passive')],
                     )
                     for p in pins
                 ],
@@ -102,6 +111,14 @@ def build(plan):
             )
         else:
             raise ValueError(f'基础生成器不支持 {kind!r}；复杂符号用已核实的原生库或本地脚本')
+        sheet.records[index].update(
+            {k: str(v) for k, v in part.get('native_properties', {}).items() if k in PART_METADATA}
+        )
+        for parameter in part.get('parameters', []):
+            if parameter.get('RECORD', '41') != '41' or parameter.get('NAME') in (None, 'Comment'):
+                raise ValueError('附加参数须为带 NAME 的参数记录，不能替换 Comment')
+            fields = {k: v for k, v in parameter.items() if k not in ('RECORD', 'OWNERINDEX')}
+            sheet.add(41, OWNERINDEX=index - 1, **fields)
         sheet.pins[ref] = {
             r['DESIGNATOR']: pin_end(r)
             for r in sheet.records[index + 1 :]
@@ -196,6 +213,12 @@ def find_ad(explicit=None):
     for root in (os.environ.get('PROGRAMFILES', r'C:\Program Files'), os.environ.get('PROGRAMFILES(X86)', '')):
         if root:
             found += Path(root, 'Altium').glob('*/X2.EXE')
+    from native_discovery import installed_locations
+
+    for path in installed_locations(r'Altium Designer'):
+        candidate = path / 'X2.EXE' if path.is_dir() else path
+        if candidate.name.lower() == 'x2.exe' and candidate.is_file():
+            found.append(candidate)
     return max(found, key=lambda p: [int(n) for n in re.findall(r'\d+', p.parent.name)] or [0]) if found else None
 
 
@@ -414,7 +437,17 @@ def environment(ad_exe=None):
         'pillow': pillow,
         'ad_exe': str(exe) if exe else None,
         'native_available': os.name == 'nt' and exe is not None,
-        'portable_commands': ['check', 'create', 'import', 'edit', 'render', 'deliver'],
+        'portable_commands': [
+            'check',
+            'create',
+            'import',
+            'edit',
+            'render',
+            'handoff',
+            'receive',
+            'compare',
+            'deliver',
+        ],
         'native_commands': ['verify', 'export', 'run-script', 'screenshot（窗口）'],
     }
 
@@ -428,6 +461,17 @@ def main():
     parser.add_argument('--report', type=Path, help='把结果 JSON 另存到文件')
     parser.add_argument('--timeout', type=float, default=180, help='等待 AD 的秒数')
     sub = parser.add_subparsers(dest='command', required=True)
+    item = sub.add_parser('handoff', help='准备可交给 Windows 原生执行的完整任务')
+    item.add_argument('plan', type=Path)
+    item.add_argument('folder', type=Path)
+    item.add_argument('--name')
+    item.add_argument('--include', action='append', default=[])
+    item = sub.add_parser('receive', help='接收 Windows 原生图纸和结果，校验文件哈希')
+    item.add_argument('job', type=Path)
+    item.add_argument('returned', type=Path)
+    item.add_argument('output', type=Path)
+    item = sub.add_parser('compare', help='比较原生文件哈希或 CSV 波形（不需要 AD）')
+    item.add_argument('arguments', nargs=argparse.REMAINDER)
     sub.add_parser('env', help='报告系统、Python、Pillow 与 AD 可用性')
     item = sub.add_parser('check', help='排版预检（不写文件）')
     item.add_argument('plan', type=Path)
@@ -449,6 +493,9 @@ def main():
     item.add_argument('source', type=Path)
     item.add_argument('target', type=Path)
     item.add_argument('--scale', type=float, default=4.0)
+    from canvas import add_renderer_arguments
+
+    add_renderer_arguments(item)
     item = sub.add_parser('screenshot', help='有 AD 时截取软件窗口，否则便携渲染')
     item.add_argument('schematic', type=Path)
     item.add_argument('target', type=Path)
@@ -472,14 +519,44 @@ def main():
     try:
         if args.timeout <= 0:
             raise ValueError('timeout 须为正数')
+        if args.command == 'import':
+            protect_output(args.plan, args.schematic)
+        elif args.command == 'edit':
+            protect_output(args.output, args.plan, args.operations)
+        elif args.command == 'render':
+            protect_output(args.target, args.source)
+        elif args.command == 'screenshot':
+            protect_output(args.target, args.schematic)
+            if args.target.suffix.lower() != '.png':
+                raise ValueError('截图输出须为 .png')
+        elif args.command == 'check' and args.preview:
+            protect_output(args.preview, args.plan)
         if args.report:
+            if args.report.suffix.lower() != '.json':
+                raise ValueError('报告输出须为 .json，不能占用工程或图片文件')
+            if args.report.exists():
+                raise FileExistsError('报告路径已存在，请使用新的路径')
             inputs = [
                 getattr(args, k, None)
-                for k in ('plan', 'project', 'expected', 'schematic', 'script', 'operations', 'source')
+                for k in (
+                    'plan',
+                    'project',
+                    'expected',
+                    'schematic',
+                    'script',
+                    'operations',
+                    'source',
+                    'output',
+                    'target',
+                )
             ]
             if args.report.resolve() in [p.resolve() for p in inputs if p]:
                 raise ValueError('报告不能覆盖输入文件')
         command = args.command
+        if command == 'compare':
+            from compare_results import main as compare_main
+
+            return compare_main(args.arguments + (['--output', str(args.report)] if args.report else []))
         failed = False
         if command == 'env':
             result = environment(args.ad_exe)
@@ -515,15 +592,24 @@ def main():
             }
             failed = bool(check['summary']['errors'])
         elif command == 'render':
+            from canvas import renderer_arguments
             from render import render_file
 
-            result = render_file(args.source, args.target, args.scale)
+            result = render_file(args.source, args.target, args.scale, **renderer_arguments(args))
         elif command == 'screenshot':
             result = screenshot(args.schematic, args.target, args.ad_exe, args.timeout)
         elif command == 'deliver':
             from deliver import deliver
 
             result = deliver(args.work, args.output, args.name, args.include)
+        elif command == 'handoff':
+            from native_job import prepare
+
+            result = prepare('ad', args.plan, args.folder, args.name, args.include)
+        elif command == 'receive':
+            from native_job import receive
+
+            result = receive(args.job, args.returned, args.output)
         else:
             exe = require_ad(args.ad_exe)
             if command == 'verify':
@@ -531,9 +617,12 @@ def main():
                 failed = not result['passed']
             elif command == 'export':
                 result = export(exe, args.schematic, args.folder, args.timeout, args.dpi)
+                failed = not result['text_review'].get('passed', False)
             else:
                 result = run_script(exe, args.script, args.procedure, args.timeout)
         if args.report:
+            if args.report.exists():
+                raise FileExistsError('报告路径与本次生成的文件冲突，未覆盖生成文件')
             write_json(args.report, result)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 1 if failed else 0

@@ -25,7 +25,16 @@ AD_PLAN = ROOT / 'skills/ad-schematic-layout/assets/rc-filter-plan.json'
 PSIM_PLAN = ROOT / 'skills/psim-simulation-layout/assets/rc-filter-plan.json'
 # 示例 SchDoc 的固定哈希：生成器输出在任何系统上都必须逐字节相同；有意修改生成器时同步更新。
 EXAMPLE_SHA256 = 'bd8a32b1df5075a3ebedfcc4c89ce5359bd79a0842b54bbfa27505f85180cedc'
-SHARED = ('canvas.py', 'capture.py', 'deliver.py', 'mcp_server.py', 'review_emf_text.py')
+SHARED = (
+    'canvas.py',
+    'capture.py',
+    'deliver.py',
+    'mcp_server.py',
+    'review_emf_text.py',
+    'compare_results.py',
+    'native_job.py',
+    'native_discovery.py',
+)
 HAS_PILLOW = importlib.util.find_spec('PIL') is not None
 
 

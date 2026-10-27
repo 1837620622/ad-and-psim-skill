@@ -263,7 +263,9 @@ def encode(record):
 def _text(raw, utf8=False):
     if utf8:
         return raw.decode('utf-8', errors='replace')
-    for codec in ('utf-8', 'gbk'):
+    # 普通记录由本写入器按 GBK 编码；UTF-8 属性有显式的 %UTF8% 前缀。
+    # 部分合法 GBK 字节也恰好是合法 UTF-8，不能优先按 UTF-8 猜测。
+    for codec in ('gbk', 'utf-8'):
         try:
             return raw.decode(codec)
         except UnicodeDecodeError:

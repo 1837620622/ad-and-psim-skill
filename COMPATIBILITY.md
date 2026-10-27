@@ -1,6 +1,6 @@
 # 兼容说明 / Compatibility
 
-两个技能采用 [Agent Skills 开放格式](https://agentskills.io/specification)：SKILL.md 加相对路径的参考、脚本和示例；指令是普通 Markdown，脚本只用 Python 标准库（PNG 需要 Pillow）。能不能用取决于**宿主**而不是模型品牌：宿主要让模型读本地文件、运行命令、查看图片。满足这三点，Claude、GPT、Gemini、Grok、DeepSeek、Qwen、Kimi、GLM 等模型都按同一套指令工作。
+两个技能采用 [Agent Skills 开放格式](https://agentskills.io/specification)：SKILL.md 加相对路径的参考、脚本和示例；指令是普通 Markdown，核心脚本只用 Python 标准库（便携 PNG 可选 resvg-py 或 Pillow，Windows 原生 EMF 转 PNG 需要 Pillow）。能不能用取决于**宿主**而不是模型品牌：宿主要让模型读本地文件、运行命令、查看图片。满足这三点，Claude、GPT、Gemini、Grok、DeepSeek、Qwen、Kimi、GLM 等模型都按同一套指令工作。
 
 Both skills follow the Agent Skills format. Compatibility depends on the host, not the model vendor: the host must let the model read local files, run commands and inspect images.
 
@@ -25,6 +25,8 @@ Codex 的技能发现实际验证过；其他宿主按官方文档的目录适�
 ## MCP
 
 不支持技能目录、但支持 MCP 的客户端，用 MCP 服务器接入同样的功能：`npx -y github:1837620622/ad-and-psim-skill mcp`，或直接运行 `skills/ad-schematic-layout/scripts/mcp_server.py --with skills/psim-simulation-layout/scripts`。服务器支持 MCP 协议 2024-11-05 到 2025-11-25，工具参数只用基本 JSON 类型，方便各家模型调用。
+
+服务器提供 29 个工具，包括跨系统的任务准备、原生结果接收和一致性比较。原生调用仍在 Windows 执行；可在移动端先准备任务目录，再离线传到 Windows 双击运行，不需要启动网络服务。
 
 ## 让不同模型给出一致的结果
 
@@ -55,6 +57,10 @@ Use the native software on Windows to verify, simulate and export; fix every tex
 
 预检、生成 AD 文件、导入修改、渲染、PSIM 构建包、波形测量和交付在 Windows、macOS、Linux 上都能运行。AD 原生脚本、PSIM 接口、原生出图和窗口截图需要 Windows 与已授权的软件；在其他系统上，把生成的 AD 文件或 PSIM 构建包交给有软件的 Windows 电脑即可。
 
+`handoff` / `receive` 支持 Mac/Linux 移动办公：准备计划和便携预览，Windows 实际编译或求解，再接收原生 PNG 与原始结果。原生 PNG 按字节复制，因此不受 Mac/Linux 的本地字体替换影响；离线便携渲染仍是近似图。操作步骤见 [移动端交接](skills/ad-schematic-layout/references/mobile-workflow.md)。
+
 Checks, AD file generation, import and editing, rendering, PSIM build kits, waveform measurement and delivery run on Windows, macOS and Linux. Native AD scripts, the PSIM API, native export and window screenshots need Windows with licensed software.
+
+Handoff/reception supports mobile work without AD/PSIM on Mac/Linux. Windows performs the native steps; reception verifies and copies its native PNG and raw results byte for byte. Offline portable rendering remains approximate. The portable CI matrix includes all three operating systems with Python 3.10 and 3.13; native checks are separate.
 
 来源 / Sources：[Agent Skills](https://agentskills.io/specification)、[Codex](https://learn.chatgpt.com/docs/build-skills)、[Claude Code](https://code.claude.com/docs/en/skills)、[Claude 插件](https://code.claude.com/docs/en/plugins-reference)、[Gemini CLI](https://geminicli.com/docs/cli/skills/)、[GitHub Copilot](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills)、[Cursor](https://cursor.com/docs/skills)、[OpenCode](https://opencode.ai/docs/skills)、[ZCode](https://www.zcode.network/en/docs/skill/)、[DSH](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/skill/skill-filesystem)。

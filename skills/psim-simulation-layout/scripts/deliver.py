@@ -8,6 +8,7 @@ import fnmatch
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import sys
 
@@ -58,7 +59,12 @@ def deliver(work, output, name=None, include=(), dry_run=False):
     if not work.is_dir():
         raise ValueError(f'工作目录不存在：{work}')
     name = name or work.name
+    if not re.fullmatch(r'[\w -]+', name) or name.strip(' .') != name or name in ('.', '..'):
+        raise ValueError('交付名称只能含字母、数字、中文、空格、下划线或短横线，不能含路径')
     target, archive = output / name, output / f'{name}-archive'
+    for folder in (target, archive):
+        if folder.resolve().parent != output or folder.resolve() == work or work in folder.resolve().parents:
+            raise ValueError('交付目录必须位于指定输出目录内，且不能写回工作目录')
     if output == work or work in output.parents:
         raise ValueError('交付目录不能放在工作目录内部')
     for folder in (target, archive):
@@ -82,19 +88,32 @@ def deliver(work, output, name=None, include=(), dry_run=False):
     if '.schdoc' in suffixes and '.prjpcb' not in suffixes:
         warnings.append('有 SchDoc 但没有 PrjPcb 工程文件')
     manifest = {'delivery': str(target), 'archive': str(archive), 'files': [], 'warnings': warnings}
+    occupied = {p.as_posix().casefold() for p in plan['archive']}
     for kind, root in (('deliver', target), ('archive', archive)):
         for relative in plan[kind]:
             source = work / relative
+            copied_relative = relative
+            if kind == 'archive' and relative.as_posix().casefold() == 'manifest.json':
+                # 保留输入目录已有的清单，不能被本工具的新清单覆盖。
+                number = 0
+                while True:
+                    copied_relative = Path(f'manifest.source{"-" + str(number) if number else ""}.json')
+                    if copied_relative.as_posix().casefold() not in occupied:
+                        break
+                    number += 1
+                occupied.add(copied_relative.as_posix().casefold())
             entry = {
                 'role': kind,
-                'path': relative.as_posix(),
+                'path': copied_relative.as_posix(),
                 'sha256': sha256(source),
                 'bytes': source.stat().st_size,
             }
+            if copied_relative != relative:
+                entry['source_path'] = relative.as_posix()
             manifest['files'].append(entry)
             if dry_run:
                 continue
-            destination = root / relative
+            destination = root / copied_relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
             if sha256(destination) != entry['sha256']:

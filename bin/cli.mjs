@@ -82,6 +82,29 @@ function remove(target) {
   else fs.rmSync(target, { recursive: true, force: true });
 }
 
+function excluded(relative) {
+  const parts = relative.split(path.sep);
+  return parts.includes('__pycache__') || relative.endsWith('.pyc') || parts.at(-1) === MARKER
+    || (parts[0] === 'references' && ['images', 'professional'].includes(parts[1]));
+}
+
+function skillFiles(root, directory = root, result = new Map()) {
+  for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
+    const file = path.join(directory, item.name);
+    const relative = path.relative(root, file);
+    if (excluded(relative)) continue;
+    if (item.isDirectory()) skillFiles(root, file, result);
+    else if (item.isFile()) result.set(relative, fs.readFileSync(file));
+  }
+  return result;
+}
+
+function sameSkill(source, target) {
+  const expected = skillFiles(source);
+  const actual = skillFiles(target);
+  return expected.size === actual.size && [...expected].every(([name, bytes]) => actual.get(name)?.equals(bytes));
+}
+
 function runSkills(action, options) {
   const results = [];
   for (const [dir, agents] of targets(options)) {
@@ -98,7 +121,7 @@ function runSkills(action, options) {
           } else record.status = 'not installed by this tool';
         } else if (action === 'check') {
           if (!present) throw new Error('未安装');
-          const same = fs.readFileSync(path.join(target, 'SKILL.md')).equals(fs.readFileSync(path.join(source, 'SKILL.md')));
+          const same = sameSkill(source, target);
           if (!same) throw new Error('已安装版本与当前包不同，重新运行 install 即可更新');
           record.status = 'ok';
         } else {
@@ -112,7 +135,7 @@ function runSkills(action, options) {
           } else {
             fs.cpSync(source, target, {
               recursive: true,
-              filter: (item) => !item.includes('__pycache__') && !item.endsWith('.pyc'),
+              filter: (item) => !excluded(path.relative(source, item)),
             });
             fs.writeFileSync(path.join(target, MARKER), `${ROOT}\n`);
           }

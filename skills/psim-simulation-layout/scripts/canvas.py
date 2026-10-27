@@ -1,8 +1,12 @@
-"""渲染画布：同一套绘图接口输出 SVG（标准库）或 PNG（需要 Pillow）。两项技能各带一份相同的副本。"""
+"""渲染画布：SVG 使用标准库；PNG 可选 resvg-py 或 Pillow。两项技能各带一份相同的副本。"""
 
+import hashlib
 import html
+import importlib.util
 import math
 from pathlib import Path
+import struct
+import zlib
 
 FONT_FILES = {
     'serif': (
@@ -47,6 +51,8 @@ class Svg:
         self.scale, self.flip, self.y_up = scale, flip, y_up
         self.size = (math.ceil(width * scale), math.ceil(height * scale))
         self.items = []
+        self.renderer = 'svg'
+        self.font_profile = None
 
     def p(self, x, y):
         return x * self.scale, ((self.flip - y) if self.y_up else y) * self.scale
@@ -83,16 +89,57 @@ class Svg:
             f'{html.escape(value)}</text>'
         )
 
-    def save(self, path, background):
+    def document(self, background):
         width, height = self.size
         body = '\n'.join(self.items)
-        Path(path).write_text(
+        return (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
             f'viewBox="0 0 {width} {height}">\n<!-- portable render, not a native export -->\n'
-            f'<rect width="100%" height="100%" fill="{background}"/>\n{body}\n</svg>\n',
-            encoding='utf-8',
-            newline='\n',
+            f'<rect width="100%" height="100%" fill="{background}"/>\n{body}\n</svg>\n'
         )
+
+    def save(self, path, background):
+        Path(path).write_text(self.document(background), encoding='utf-8', newline='\n')
+
+
+class Resvg(Svg):
+    """可选的 Rust SVG 后端；固定 SVG 与字体输入，减少系统绘图差异。"""
+
+    def __init__(self, *args, font_files=(), font_dirs=(), skip_system_fonts=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.renderer = 'resvg'
+        self.font_files = [str(Path(p).resolve()) for p in font_files]
+        self.font_dirs = [str(Path(p).resolve()) for p in font_dirs]
+        if any(not Path(p).is_file() for p in self.font_files) or any(not Path(p).is_dir() for p in self.font_dirs):
+            raise ValueError('字体文件或目录不存在')
+        if skip_system_fonts and not (self.font_files or self.font_dirs):
+            raise ValueError('禁用系统字体时必须提供字体文件或目录，避免产生缺字预览')
+        self.skip_system_fonts = skip_system_fonts
+        self.font_profile = {
+            'uses_system_fonts': not skip_system_fonts,
+            'font_files_sha256': {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in self.font_files},
+            'font_directories': self.font_dirs,
+        }
+
+    def save(self, path, background):
+        try:
+            import resvg_py
+        except ImportError as error:
+            raise RuntimeError('resvg 后端需要 pip install resvg-py==0.5.0') from error
+        data = resvg_py.svg_to_bytes(
+            svg_string=self.document(background),
+            background=background,
+            font_files=self.font_files or None,
+            font_dirs=self.font_dirs or None,
+            skip_system_fonts=self.skip_system_fonts,
+        )
+        if data[:8] != b'\x89PNG\r\n\x1a\n' or data[12:16] != b'IHDR' or data[-8:-4] != b'IEND':
+            raise RuntimeError('resvg 没有返回有效的 PNG')
+        # 保留 PNG 来源元数据，便携图不能被误认为厂商原生导出。
+        text = b'Source\x00portable render, not a native export'
+        chunk = struct.pack('>I', len(text)) + b'tEXt' + text
+        chunk += struct.pack('>I', zlib.crc32(b'tEXt' + text) & 0xFFFFFFFF)
+        Path(path).write_bytes(data[:33] + chunk + data[33:])
 
 
 class Raster(Svg):
@@ -106,6 +153,7 @@ class Raster(Svg):
         self.image = Image.new('RGB', self.size, background)
         self.draw = ImageDraw.Draw(self.image)
         self.fonts = {}
+        self.renderer = 'pillow'
 
     def font(self, family, size, value):
         from PIL import ImageFont
@@ -161,12 +209,57 @@ class Raster(Svg):
         image.save(path, pnginfo=info)
 
 
-def open_canvas(target, width, height, scale, background, flip=None, y_up=True):
+def open_canvas(
+    target,
+    width,
+    height,
+    scale,
+    background,
+    flip=None,
+    y_up=True,
+    renderer='auto',
+    font_files=(),
+    font_dirs=(),
+    skip_system_fonts=False,
+):
     """按扩展名选择 SVG 或 PNG 画布。"""
     suffix = Path(target).suffix.lower()
     flip = height if flip is None else flip
     if suffix == '.png':
+        if renderer not in ('auto', 'resvg', 'pillow'):
+            raise ValueError('renderer 须为 auto、resvg 或 pillow')
+        if renderer == 'resvg' or renderer == 'auto' and importlib.util.find_spec('resvg_py') is not None:
+            return Resvg(
+                width,
+                height,
+                scale,
+                flip,
+                y_up=y_up,
+                font_files=font_files,
+                font_dirs=font_dirs,
+                skip_system_fonts=skip_system_fonts,
+            )
+        if font_files or font_dirs or skip_system_fonts:
+            raise ValueError('显式字体配置需要 resvg 后端')
         return Raster(width, height, scale, flip, background, y_up=y_up)
     if suffix == '.svg':
+        if font_files or font_dirs or skip_system_fonts:
+            raise ValueError('字体文件配置用于 resvg PNG；SVG 的字体由查看器加载')
         return Svg(width, height, scale, flip, y_up)
     raise ValueError('输出须为 .png 或 .svg')
+
+
+def add_renderer_arguments(parser):
+    parser.add_argument('--renderer', choices=['auto', 'resvg', 'pillow'], default='auto')
+    parser.add_argument('--font-file', action='append', default=[], type=Path)
+    parser.add_argument('--font-dir', action='append', default=[], type=Path)
+    parser.add_argument('--no-system-fonts', action='store_true')
+
+
+def renderer_arguments(args):
+    return {
+        'renderer': args.renderer,
+        'font_files': args.font_file,
+        'font_dirs': args.font_dir,
+        'skip_system_fonts': args.no_system_fonts,
+    }

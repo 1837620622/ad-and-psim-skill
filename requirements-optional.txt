@@ -1,1 +1,2 @@
-Pillow
+Pillow==13.0.0; python_version >= "3.11"
+resvg-py==0.5.0

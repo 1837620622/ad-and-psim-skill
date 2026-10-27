@@ -15,12 +15,14 @@ import subprocess
 import sys
 import tempfile
 
-SERVER = {'name': 'ad-and-psim-skill', 'version': '1.1.0'}
+SERVER = {'name': 'ad-and-psim-skill', 'version': '1.2.0'}
 PROTOCOLS = ('2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05')
 INSTRUCTIONS = (
     'Tools for Altium Designer (ad_*) and PSIM (psim_*). Call *_env first to see what this machine can run. '
-    'Portable tools (check, create, import, edit, render, package, deliver) work on any OS; verify/export/'
-    'simulate and window screenshots need Windows with the native software. Fix every layout-check error '
+    'AD file generation, plan check/edit, render, package, handoff, receive, compare and deliver are portable. '
+    'PSIM native creation, verify/export/simulate and window screenshots need Windows with the native software. '
+    'Handoff prepares a Windows job; receive verifies and copies native preview pixels and results unchanged. '
+    'Fix every layout-check error '
     'before native steps. Renders are previews, not native exports.'
 )
 IMAGE_KEYS = ('screenshot', 'render', 'preview', 'compact_png', 'png')
@@ -126,7 +128,11 @@ class Server:
         return {'content': content, 'isError': bool(failed)}
 
     def handle(self, message):
+        if not isinstance(message, dict):
+            return {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': '请求必须是 JSON-RPC 对象'}}
         method, ident = message.get('method'), message.get('id')
+        if message.get('jsonrpc') != '2.0' or not isinstance(method, str):
+            return {'jsonrpc': '2.0', 'id': ident, 'error': {'code': -32600, 'message': '无效的 JSON-RPC 请求'}}
         if ident is None:
             return None  # 通知（如 notifications/initialized）不需要回复
         try:

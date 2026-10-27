@@ -2,11 +2,13 @@
 
 **简体中文** · [English](README.en.md)
 
+[更新记录](CHANGELOG.md) · [实测记录](docs/VALIDATION.md)
+
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-c0392b)](LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab)
 ![Windows | macOS | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555555)
 ![Agent Skills](https://img.shields.io/badge/Agent%20Skills-2%20skills-6f42c1)
-![MCP](https://img.shields.io/badge/MCP-23%20tools-0a7ea4)
+![MCP](https://img.shields.io/badge/MCP-29%20tools-0a7ea4)
 
 给 AI 编程助手用的两项技能：按一句话需求做出**可编辑的 Altium Designer 原理图**和**用 PSIM 真实求解的仿真模型**，排版按正式工程图的规则逐项检查。交付的是原生工程文件，不是图片。
 
@@ -27,7 +29,8 @@
 | 建模 | 生成 SchDoc + PrjPcb，在任何系统上字节一致 | 生成 Windows 构建包，由 PSIM 写出 psimsch |
 | 改现有图 | 导入 SchDoc → 按操作清单修改 → 重新生成，连线自动正交重连 | 按操作清单修改计划，移动元件时导线自动绕开符号 |
 | 排版检查 | 栅格、悬空线、隐式短路、预测网表、文字重叠与压线、穿件导线、画面密度、参数写法 | 导线、栅格、文字重叠与压线、导线穿符号、仿真控制位置、参数写法 |
-| 预览 | 接近 AD 原生导出的便携渲染（PNG/SVG） | PSIM 样式的便携渲染（PNG/SVG） |
+| 预览 | 离线便携渲染；接收 Windows 原生 PNG 后直接显示原图 | 离线便携渲染；接收 Windows 原生 PNG 后直接显示原图 |
+| 移动办公 | Mac/Linux 准备任务，Windows 编译出图，再验证接收 | Mac/Linux 准备任务，Windows 原生求解，再接收 SMV/CSV 与原图 |
 | 原生（Windows） | 编译、逐引脚网表比较、原生出图、窗口截图 | 建模、改参数、求解、波形读回、原生出图、窗口截图 |
 | 结果核验 | 原生 EMF 上的文字重叠、越界、压线审查 | 同左；另有按时间加权的功率、效率、RMS、门极频率测量 |
 | 交付 | 客户目录只放工程和图纸，过程文件另存归档，不打压缩包 | 客户目录只放模型和仿真结果，过程文件另存归档 |
@@ -48,12 +51,24 @@
 | 用途 | 需要 |
 | --- | --- |
 | 预检、生成、修改、渲染为 SVG、构建包、交付 | Python 3.10+（只用标准库），Windows、macOS、Linux 均可 |
-| 渲染为 PNG、截图格式转换 | 另装 Pillow：`python -m pip install -r requirements-optional.txt` |
+| 渲染为 PNG | 可选 resvg-py 或 Pillow：`python -m pip install -r requirements-optional.txt` |
+| Windows 原生 EMF 转 PNG、截图格式转换 | Python 3.11+、Pillow 13（已包含在上述可选依赖中） |
 | 用 npx 安装或启动 MCP | Node.js 18+ |
 | AD 编译与原生出图 | Windows + 已授权的 Altium Designer（验证过 Enterprise 26.4.1） |
 | PSIM 原生建模、求解与出图 | Windows + 已授权的 PSIM 及其 Python 接口（验证过 2026.0.0.7209） |
 
 其他软件版本没有验证过，不在承诺范围内。
+
+可选依赖按 Python 版本选择：Python 3.10 安装 resvg 进行便携 PNG 预览；Python 3.11+ 另安装 Pillow 13。没有固定安装带已知漏洞的旧 Pillow。
+
+Mac 离线 PNG 预览优先使用 `resvg-py`；它提供 Intel 与 Apple Silicon 的安装包，不需要另装 Cairo。安装后 `render` 自动采用它，也可显式选择：
+
+```bash
+python skills/ad-schematic-layout/scripts/native_ad.py render skills/ad-schematic-layout/assets/rc-filter-plan.json work/ad-preview.png --renderer resvg
+python skills/psim-simulation-layout/scripts/native_psim.py render skills/psim-simulation-layout/assets/rc-filter-plan.json work/psim-preview.png --renderer resvg
+```
+
+可重复传 `--font-file` / `--font-dir`，配合 `--no-system-fonts` 固定允许使用的字体；JSON 记录显式字体文件的哈希。相同字体只能减少差异，便携图仍不保证与原生软件逐像素一致。专用 AD 预览包 `altium-monkey` 的评测、许可及平台限制见 [预览后端比较](docs/preview-backends.md)。
 
 ## Windows、macOS、Linux 都能用
 
@@ -67,7 +82,40 @@ AD 和 PSIM 只有 Windows 版。本包把能脱离软件完成的工作都做�
 | AD 编译与出图、PSIM 建模与求解、窗口截图 | ✓（需装软件） | 交给有软件的 Windows 电脑 |
 | 波形测量、整理交付 | ✓ | ✓ |
 
-在 Mac 上做好的 AD 图纸可以直接发给客户。PSIM 的 psimsch 是私有二进制格式，所以在 Mac 上生成的是构建包：在装有 PSIM 的 Windows 电脑上双击 `build.bat`，由 PSIM 自己写出原生文件、求解并出图，结果和在 Windows 上直接建模一样。
+Mac/Linux 不必安装 AD/PSIM。AD 的基础生成器可在移动端写出可编辑文件；最终交付前由 Windows 原生编译、出图。PSIM 模型和仿真结果由 Windows 上的实际 PSIM 生成。
+
+## Mac/Linux 移动办公
+
+```bash
+# 移动端：准备自带执行工具、计划和离线预览的任务目录
+python skills/ad-schematic-layout/scripts/native_ad.py handoff skills/ad-schematic-layout/assets/rc-filter-plan.json work/mobile-ad
+python skills/psim-simulation-layout/scripts/native_psim.py handoff skills/psim-simulation-layout/assets/rc-filter-plan.json work/mobile-psim --name RC_Filter
+```
+
+将整个任务目录传到 Windows，双击其中的 `run.bat`。Windows 需要对应软件、Python 3.11+ 和 Pillow 13；软件安装位置支持注册表自动发现，也可设置 `AD_EXE` 或 `PSIM_DIR`。AD 依次生成、编译、比较网表、原生出图；PSIM 依次建模、求解、原生出图。任一阶段失败都停止并保留诊断。
+
+将 Windows 产生的 `native-results/` 目录分别传回 `work/returned-ad`、`work/returned-psim`，再运行：
+
+```bash
+python skills/ad-schematic-layout/scripts/native_ad.py receive work/mobile-ad work/returned-ad work/final-ad
+python skills/psim-simulation-layout/scripts/native_psim.py receive work/mobile-psim work/returned-psim work/final-psim
+```
+
+接收时核对请求、计划和每个文件的 SHA-256。返回的 `png` 是 Windows 原生导出的同一份图片，直接在 Mac/Linux 查看；PNG、SMV、CSV 都按字节复制，不重新绘制或计算。计划不匹配、原生检查失败或文件被修改时拒绝接收。参数文件等依赖可在准备任务时用 `--include params.txt` 显式带上。
+
+| 图的来源 | 能确认什么 |
+| --- | --- |
+| `preview.render.png/svg` | 可离线检查布局；采用近似字体与已标定符号，不保证任意器件与原生软件逐像素一致 |
+| `receive` 返回的 `png` | Windows 原生导出原图；接收副本与原图字节相同，可确认实际软件图面 |
+
+要比较结果，用零容差检查完整 CSV，或比较工程/图片的文件哈希：
+
+```bash
+python skills/psim-simulation-layout/scripts/native_psim.py compare reference/native.csv work/final-psim/waveforms/native.csv --waveforms
+python skills/ad-schematic-layout/scripts/native_ad.py compare reference/drawing.png work/final-ad/drawing/RC_Filter.png
+```
+
+比较结果区分 `byte_identical`、`numeric_equal`、`within_tolerance` 和 `different`。显式使用 `--atol`、`--rtol` 后的容差相符，不称为字节相同。不同软件版本、模型库或求解设置仍需分别核验。详见 [移动端交接](skills/ad-schematic-layout/references/mobile-workflow.md)。
 
 ## 安装
 
@@ -152,7 +200,7 @@ python $PSIM/scripts/native_psim.py package $PSIM/assets/rc-filter-plan.json wor
 
 ### MCP
 
-MCP 服务器只用 Python 标准库，提供 23 个工具，可以读取、修改、检查、渲染当前图纸。
+MCP 服务器只用 Python 标准库，提供 29 个工具，可以读取、修改、检查、渲染当前图纸，准备移动端任务并接收和比较原生结果。
 
 ```bash
 claude mcp add ad-psim -- npx -y github:1837620622/ad-and-psim-skill mcp    # Claude Code
@@ -179,7 +227,7 @@ args = ["-y", "github:1837620622/ad-and-psim-skill", "mcp"]
 不想用 Node 时，把命令换成 `python`，参数换成 `["<仓库>/skills/ad-schematic-layout/scripts/mcp_server.py", "--with", "<仓库>/skills/psim-simulation-layout/scripts"]`。
 
 <details>
-<summary>23 个工具一览</summary>
+<summary>29 个工具一览</summary>
 
 | 用途 | AD | PSIM |
 | --- | --- | --- |
@@ -191,6 +239,8 @@ args = ["-y", "github:1837620622/ad-and-psim-skill", "mcp"]
 | 原生核验 | `ad_verify` | `psim_simulate`、`psim_measure` |
 | 原生出图 | `ad_export` | `psim_export` |
 | 交付 | `ad_deliver` | `psim_deliver` |
+| 移动端交接 | `ad_handoff`、`ad_receive` | `psim_handoff`、`psim_receive` |
+| 一致性比较 | `ad_compare` | `psim_compare` |
 
 `ad_verify`、`ad_export`、`psim_create`、`psim_inspect`、`psim_edit`、`psim_simulate`、`psim_export` 需要 Windows 和对应软件；截图工具在没有软件时自动改用便携渲染；其余工具在任何系统上都能用。
 
@@ -236,7 +286,7 @@ python $PSIM/scripts/native_psim.py deliver work/ delivery/ --name 项目名    
 
 **PSIM 为什么要先生成构建包？**
 
-psimsch 是私有二进制格式，只有 PSIM 自己写出的文件才能保证在任何 PSIM 上打开一致。构建包里有计划、脚本和 `build.bat`，双击后由本机 PSIM 建模、求解并出图。
+psimsch 是私有二进制格式，模型由目标 Windows 上的 PSIM 创建、求解和验证。构建包内有计划、脚本和 `build.bat`；移动端交接使用 `handoff` 和 `run.bat`，还会生成可校验的返回清单。文件兼容性和实际求解版本分别记录。
 
 **技能和 MCP 选哪个？**
 
@@ -271,7 +321,7 @@ ad-and-psim-skill/
 
 ## 验证状态
 
-- 可移植部分（预检、生成、导入与修改、渲染、构建包、MCP、安装器）有自动测试，在 Linux 上用 Python 3.10 和 3.13 运行：`python -m unittest discover -s tests -v`。
+- 可移植部分（预检、生成、导入与修改、渲染、交接与接收、结果比较、MCP、安装器）有自动测试；CI 矩阵配置 Windows、macOS、Linux 与 Python 3.10/3.13：`python -m unittest discover -s tests -v`。实际运行情况见 Actions 和验证记录。
 - 原生部分在 AD Enterprise 26.4.1、PSIM 2026.0.0.7209 上验证过；记录、边界和待复验的项目见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 - Codex 的技能发现实际验证过；其他宿主按官方文档的目录适配，未逐个运行完整设计任务。
 
