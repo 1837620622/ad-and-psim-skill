@@ -16,12 +16,12 @@
 
 | | 图像尺寸 | 线条和文字像素在 1 像素内对齐 | 线条和文字像素颜色一致 |
 | --- | --- | --- | --- |
-| AD：原平滑渲染 → gdi | 不同 → 相同 | 96.7% → 97.8% | 46.0% → 73.7% |
-| PSIM：原平滑渲染 → gdi | 不同 → 相同 | 57.2% → 97.1% | 0.9% → 30.9% |
+| AD：原平滑渲染 → gdi | 不同 → 相同 | 96.7% → 97.8% | 46.0% → 72.5% |
+| PSIM：原平滑渲染 → gdi | 不同 → 相同 | 57.2% → 97.0% | 0.9% → 31.5% |
 
 只统计线条和文字像素（任一张图在该处有墨迹），不把白底算进一致率。颜色不一致的主要是文字抗锯齿：Windows 的 TrueType 微调和 ClearType 无法逐像素复现。原生导出的像素比例取决于导出机器的设置，换一台电脑导出时可用 `--scale` 对齐；未标定的 PSIM 元件仍画成方框。
 
-The default `gdi` backend is calibrated against the native exports in the repository: same image size, and for line and text pixels (white background excluded) 97.8% (AD) and 97.1% (PSIM) align within one pixel. Text anti-aliasing is the main remaining difference.
+The default `gdi` backend is calibrated against the native exports in the repository: same image size, and for line and text pixels (white background excluded) 97.8% (AD) and 97.0% (PSIM) align within one pixel. Text anti-aliasing is the main remaining difference.
 
 ## 选择依据 / Choice
 

@@ -288,8 +288,16 @@ class Gdi(Svg):
         key = 'cjk' if _cjk(value) and 'cjk' in self.faces else family
         return self.faces.get(key) or self.faces.get('serif')
 
+    def font(self, face, pixels):
+        from PIL import ImageFont
+
+        key = (face['path'], face.get('index', 0), pixels)
+        if key not in self.fonts:
+            self.fonts[key] = ImageFont.truetype(face['path'], pixels, index=face.get('index', 0))
+        return self.fonts[key]
+
     def text(self, x, y, value, size, fill, family='serif', rotation=0, anchor='start', bold=False, italic=False):
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image, ImageDraw
 
         if not value:
             return
@@ -297,19 +305,27 @@ class Gdi(Svg):
         if face is None:
             raise RuntimeError('没有找到可用的 Times New Roman/Arial 或同度量字体')
         em = max(4, round(size * self.scale))
-        key = (face['path'], face.get('index', 0), em)
-        if key not in self.fonts:
-            self.fonts[key] = ImageFont.truetype(face['path'], em * 3, index=face.get('index', 0))
-        font = self.fonts[key]
-        horizontal = {'start': 'l', 'middle': 'm', 'end': 'r'}[anchor]
-        left, top, right, bottom = font.getbbox(value, anchor=horizontal + 's')
+        font = self.font(face, em * 3)
+        # 逐字排版：步进取大字号下的无微调步进，不做字距调整（GDI 的 TextOut 也不做）。Pillow 有没有
+        # raqm 排版引擎（Mac 上常没有）都得到同样的字位，原生预览的尺寸不随机器变化。
+        big = self.font(face, ADVANCE_SIZE)
+        pens, pen = [], 0.0
+        for char in value:
+            pens.append(pen)
+            pen += big.getlength(char) * em * 3 / ADVANCE_SIZE
+        pens = [p - {'start': 0, 'middle': pen / 2, 'end': pen}[anchor] for p in pens]
+        boxes = [(p + b[0], b[1], p + b[2], b[3]) for p, b in zip(pens, (font.getbbox(c, anchor='ls') for c in value))]
+        left, top = min(b[0] for b in boxes), min(b[1] for b in boxes)
+        right, bottom = max(b[2] for b in boxes), max(b[3] for b in boxes)
         pad = 2
         # 三倍分辨率绘制再折回：纵向三行合一，横向保留三个子像素做 1-2-3-2-1 滤波，得到 RGB 三路覆盖率。
         ax, ay = 3 * (pad + math.ceil(-left / 3)), 3 * (pad + math.ceil(-top / 3))
         width3 = ax + 3 * (math.ceil(right / 3) + pad)
         height3 = ay + 3 * (math.ceil(bottom / 3) + pad)
         mask = Image.new('L', (width3, height3), 0)
-        ImageDraw.Draw(mask).text((ax, ay), value, fill=255, font=font, anchor=horizontal + 's')
+        draw = ImageDraw.Draw(mask)
+        for char, p in zip(value, pens):
+            draw.text((ax + p, ay), char, fill=255, font=font, anchor='ls')
         coverage = _subpixel(_rows(mask))
         px, py = self.p(x, y)
         # GDI 把文字原点（基线）对齐到整像素。
@@ -452,6 +468,8 @@ def _find_faces(font_files, font_dirs):
 
 # 与原生导出逐像素比对标定：三行平均后把 20% 以下的覆盖率压为 0、80% 以上压满，接近 GDI 纵向的硬边。
 TEXT_EDGE = 0.2
+# 量字宽步进用的字号：字号够大时，basic 引擎取整后的步进与 raqm 的无微调步进相差不到 0.01 像素。
+ADVANCE_SIZE = 2048
 
 
 def _rows(mask):

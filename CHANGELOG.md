@@ -4,7 +4,7 @@
 
 ### 新增 / Added
 
-- 仿 Windows 原生出图（`--renderer gdi`，PNG 默认）：按仓库里的原生导出逐像素标定比例、线宽、取整和 ClearType 式文字；RC 示例与原生图尺寸相同，线条和文字像素 AD 97.8%、PSIM 97.1% 在 1 像素内对齐（不计白底）。优先用系统的 Times New Roman/Arial，没有时用字宽相同的 Liberation 字体；`env` 显示所用字体。
+- 仿 Windows 原生出图（`--renderer gdi`，PNG 默认）：按仓库里的原生导出逐像素标定比例、线宽、取整和 ClearType 式文字；RC 示例与原生图尺寸相同，线条和文字像素 AD 97.8%、PSIM 97.0% 在 1 像素内对齐（不计白底）。优先用系统的 Times New Roman/Arial，没有时用字宽相同的 Liberation 字体；`env` 显示所用字体。
 - `preflight`：上 Windows 前的离线预测。AD 给出预计的编译 error/warning（RC 示例预测 4 条缺少封装，与实测一致）和网表对照；PSIM 给出仿原生预览和离线预仿真。`ready_for_windows` 为 true 时没有已知阻碍。
 - `presim`（PSIM）：用与 PSIM 同类的算法（节点分析 + 固定步长梯形积分）离线预仿真 R、L、C、直流源、正弦源和电压探头组成的线性电路，输出 CSV 并检查步长和时长；其他元件直接拒绝。
 - 交接任务带上离线预测；Windows 运行后返回清单的 `forecast` 记录预测与实际的对照。
@@ -24,6 +24,8 @@
 - 32 位或 ARM64 的 Python 载入 PSIM 接口失败时，报出当前 Python 的架构并提示改用与 PSIM 相同架构的 Python。
 - `PSIM_DIR`、`AD_EXE` 带引号也能找到（资源管理器“复制文件地址”和 `set X="..."` 会把引号带进去）；`build.bat` 不再把 `PSIM_DIR` 作为参数转交，以反斜杠结尾的路径不会再把后面的参数吞掉。
 - AD 左右朝向的电源端口名称按 AD 的规则从符号末端向外读，不再误报压在自己的符号上。
+- 仿原生出图逐字排版：字宽取无微调步进，不做字距调整（与原生导出一致）；Mac 上 Pillow 没有 raqm 排版引擎时也得到与 Linux、Windows 相同的图像尺寸和像素。
+- 两个 SKILL.md 增加“逐步操作（照着做）”：每一步的命令、要看的 JSON 字段、按 finding 代码的处理方法和常见错误表。
 - MCP 的 `--with` 相对路径先按当前目录找，找不到再按 `mcp_server.py` 所在目录找；目录里没有 `mcp_tools.py` 时直接报错，不再启动后崩溃。
 
 This release adds a Windows-look renderer calibrated against native exports, offline forecasts (`preflight`), linear PSIM pre-simulation (`presim`), automatic label placement (`place_text`) and one-click opening on Windows. Overlapping text is now an error in both checkers. `build.bat` and `run.bat` check Python first, keep the window open on failure and can simply be run again after a fix. psimsch remains PSIM's closed format: it is written by PSIM itself on Windows and then opened automatically.

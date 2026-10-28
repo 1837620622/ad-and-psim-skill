@@ -27,6 +27,8 @@ STROKE = 0.5
 NATIVE_MARGIN_PX = 30
 # 仿原生（gdi）默认比例与像素对齐：与 PSIM 2026 参考导出（dpi 120）逐像素比对标定，见 docs/VALIDATION.md。
 NATIVE_LOOK = {'scale': 1.555, 'offset': (0.5, 0.125)}
+# 原生导出不做字距调整，文字起点比按步进排出的位置偏左约 0.75 像素（同上标定；取可行区间的中点）。
+NATIVE_TEXT_DX_PX = -0.75
 
 
 def _bounds(plan):
@@ -147,10 +149,12 @@ def render_plan(plan, target, scale=None, margin=20, **canvas_options):
     for p, count in connections.items():
         if count >= 3 or (count >= 1 and any(inside(p, s) for s in wires)):
             canvas.ellipse(p[0] - shift[0], p[1] - shift[1], 1.5, 1.5, DOT, 0.3, DOT)
+    nudge = NATIVE_TEXT_DX_PX / canvas.sx if canvas.renderer == 'gdi' else 0
     for element in plan['elements']:
         for label in element.get('textlinks', []):
             x, baseline, em = text_origin(label)
-            canvas.text(x - shift[0], baseline - shift[1], display_text(element, label['FieldName']), em, TEXT, 'sans')
+            value = display_text(element, label['FieldName'])
+            canvas.text(x - shift[0] + nudge, baseline - shift[1], value, em, TEXT, 'sans')
     if canvas.renderer == 'gdi':
         # PSIM 原生导出以墨迹范围为准，四周各留 30 像素。
         canvas.crop_to_ink(NATIVE_MARGIN_PX)

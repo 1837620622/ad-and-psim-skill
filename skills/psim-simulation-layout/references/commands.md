@@ -108,7 +108,7 @@ kit/
 
 ## 截图
 
-`render` 的 PNG 后端用 `--renderer auto|gdi|resvg|pillow` 选择。`auto` 在有 Pillow 和 Arial（或同度量的 Liberation Sans）时用 `gdi`：按 PSIM 原生导出（dpi 120）标定的像素比例 1.555 像素/单位、四周 30 像素留白、1 像素线条，文字起点按 AREA 水平中心 - FormatFactor、字号 6/7·|FontSize|，RC 示例与原生导出尺寸相同、线条和文字像素 97.1% 在 1 像素内对齐；没有时退回 resvg 或 Pillow 平滑渲染。未标定的元件画成带类型名的方框。`--font-file` / `--font-dir` 可指定字体文件；`--no-system-fonts` 只用于 resvg。渲染不求解电路；与实际 PSIM 图面一致的最终结果仍应接收 Windows 原生 PNG。
+`render` 的 PNG 后端用 `--renderer auto|gdi|resvg|pillow` 选择。`auto` 在有 Pillow 和 Arial（或同度量的 Liberation Sans）时用 `gdi`：按 PSIM 原生导出（dpi 120）标定的像素比例 1.555 像素/单位、四周 30 像素留白、1 像素线条，文字起点按 AREA 水平中心 - FormatFactor、字号 6/7·|FontSize|，RC 示例与原生导出尺寸相同、线条和文字像素 97.0% 在 1 像素内对齐；没有时退回 resvg 或 Pillow 平滑渲染。未标定的元件画成带类型名的方框。`--font-file` / `--font-dir` 可指定字体文件；`--no-system-fonts` 只用于 resvg。渲染不求解电路；与实际 PSIM 图面一致的最终结果仍应接收 Windows 原生 PNG。
 
 `screenshot` 在 Windows 找到 PSIM 且输入是 psimsch 时：启动 PSIM 打开模型，等窗口标题出现模型名，最大化后截取整个窗口。其他情况按计划 JSON 仿原生渲染，结果里 `source` 为 `portable_render`。截已打开的窗口：`python scripts/capture.py "PSIM" shot.png`。
 

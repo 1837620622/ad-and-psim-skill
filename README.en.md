@@ -21,7 +21,7 @@ Use them as skills in Claude Code, Codex, Gemini CLI, GitHub Copilot, Cursor, Op
 | Windows native export | ![AD native export](docs/images/ad-native-rc.png) | ![PSIM native export](docs/images/psim-native-rc.png) |
 | Mac/Linux Windows-look render (no AD/PSIM) | ![AD Windows-look render](docs/images/ad-rc-render.png) | ![PSIM Windows-look render](docs/images/psim-rc-render.png) |
 
-The second row was produced by this package on Linux without AD or PSIM. Compared pixel by pixel with the Windows native exports in the first row, the images have the same size, and counting only lines and text (not the white background) 97.8% (AD) and 97.1% (PSIM) of the pixels line up within one pixel; the remaining differences are mostly anti-aliasing at text edges. The method is in [docs/VALIDATION.md](docs/VALIDATION.md).
+The second row was produced by this package on Linux without AD or PSIM. Compared pixel by pixel with the Windows native exports in the first row, the images have the same size, and counting only lines and text (not the white background) 97.8% (AD) and 97.0% (PSIM) of the pixels line up within one pixel; the remaining differences are mostly anti-aliasing at text edges. The method is in [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## What it does
 
@@ -151,6 +151,8 @@ After the check passes, generate the new drawing and show me a render.
 ```
 
 The more precisely the request names parts, values, reference drawings and deliverables, the closer the result.
+
+Each SKILL.md has a step-by-step section: start from the example plan, and for every step it names the command to run, the JSON field to read and the fix for each kind of finding, so that a less capable model can follow it through to a check with 0 errors and then to files that open on Windows.
 
 ### Command line
 

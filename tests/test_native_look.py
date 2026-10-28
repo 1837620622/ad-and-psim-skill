@@ -108,6 +108,26 @@ class NativeLook(unittest.TestCase):
         self.assertEqual(size, rendered)
         self.assertGreater(same, 0.95)
 
+    def test_render_does_not_depend_on_pillow_layout_engine(self):
+        # Mac 上的 Pillow 常没有 raqm，只能用 basic 引擎；两种引擎画出的图必须逐字节相同。
+        from PIL import ImageFont
+
+        truetype = ImageFont.truetype
+
+        def basic(*args, **kwargs):
+            return truetype(*args, layout_engine=ImageFont.Layout.BASIC, **kwargs)
+
+        with load(PSIM, 'canvas', 'render') as (canvas, render), tempfile.TemporaryDirectory() as d:
+            if not canvas.gdi_available():
+                self.skipTest('没有 Arial 或同度量字体')
+            default = Path(render.render_plan(plan(PSIM), Path(d) / 'default.png')['render']).read_bytes()
+            ImageFont.truetype = basic
+            try:
+                forced = Path(render.render_plan(plan(PSIM), Path(d) / 'basic.png')['render']).read_bytes()
+            finally:
+                ImageFont.truetype = truetype
+        self.assertEqual(default, forced)
+
     def test_svg_and_explicit_backends_are_unchanged(self):
         with load(PSIM, 'render') as (render,), tempfile.TemporaryDirectory() as d:
             self.assertEqual(render.render_plan(plan(PSIM), Path(d) / 'p.svg')['renderer'], 'svg')

@@ -21,7 +21,7 @@
 | Windows 原生导出 | ![AD 原生导出](docs/images/ad-native-rc.png) | ![PSIM 原生导出](docs/images/psim-native-rc.png) |
 | Mac/Linux 仿原生（没装 AD/PSIM） | ![AD 仿原生](docs/images/ad-rc-render.png) | ![PSIM 仿原生](docs/images/psim-rc-render.png) |
 
-第二行由本包在没装 AD、PSIM 的 Linux 上生成。和第一行的 Windows 原生导出逐像素比较：图像尺寸相同；只看线条和文字（不算白底），AD 有 97.8%、PSIM 有 97.1% 的像素在 1 像素内对齐，剩下的差别主要是文字边缘的抗锯齿。比较方法见 [docs/VALIDATION.md](docs/VALIDATION.md)。
+第二行由本包在没装 AD、PSIM 的 Linux 上生成。和第一行的 Windows 原生导出逐像素比较：图像尺寸相同；只看线条和文字（不算白底），AD 有 97.8%、PSIM 有 97.0% 的像素在 1 像素内对齐，剩下的差别主要是文字边缘的抗锯齿。比较方法见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 
 ## 能做什么
 
@@ -148,6 +148,8 @@ npx -y github:1837620622/ad-and-psim-skill uninstall    # 只删除安装器装�
 ```
 
 需求里写清器件、参数、参考图和交付要求，结果会更接近你要的样子。
+
+两个技能的 SKILL.md 都有“逐步操作（照着做）”一节：从示例计划开始，每一步该跑哪条命令、看 JSON 里哪个字段、出了哪种问题怎么改，都写成了固定步骤，便于能力一般的模型照着做到排版预检 0 error，再生成在 Windows 上打开的文件。
 
 ### 命令行
 

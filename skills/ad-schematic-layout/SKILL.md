@@ -37,6 +37,32 @@ metadata:
 
 在 Mac/Linux 上工作时，用 `handoff` 准备完整任务目录，传到 Windows 双击 `run.bat`，再用 `receive` 校验接收。PNG 渲染默认仿 Windows 原生出图（RC 示例与原生导出尺寸相同，线条和文字像素 97.8% 在 1 像素内对齐），用来在没有 AD 时看效果；对外和最终确认仍以接收回来的原生 PNG 为准，接收器不重绘它。详见 [交接与结果一致性](references/handoff.md)。
 
+## 逐步操作（照着做）
+
+每条命令都在本技能目录下运行，打印 JSON。只按 JSON 里的字段判断成败，不凭感觉。
+
+1. **看环境。** `python scripts/native_ad.py env`，看本机有没有 AD、仿原生预览能不能用。没有 AD 也能生成 SchDoc，只是编译和原生出图要到 Windows 上做。
+2. **从示例开始写计划。** 把 [assets/rc-filter-plan.json](assets/rc-filter-plan.json) 复制成 `work/plan.json` 再改，不要从空白写起。`units` 固定 `"10mil"`，坐标向右、向上；R/C/L/Y 写 `ref`、`value`、`at`（中心）和 `vertical`；芯片和接插件写 `body` 与 `pins`（`number`、`name`、`at` 在框边上、`direction`）。`pin_map` 写每个引脚应属的网络，预检靠它核对连接。
+3. **坐标规则。** 引脚热端、导线端点、标号和电源端口锚点都在 10 的倍数上；导线点可以直接写 `"R1.1"` 这样的引脚名，斜线会自动补成直角折线；局部外围直接连线，跨区才用网络标号；电源符号朝上、地朝下，就近放在引脚处。
+4. **预检到 0 error。** `python scripts/native_ad.py check work/plan.json --preview draft.png`。看 `summary.errors`：
+   - 每条 finding 都有 `code`、`message`、`hint`，按 `hint` 改计划。
+   - 文字问题（`TEXT_OVERLAP`、`TEXT_ON_PART`、`TEXT_ON_GRAPHICS`、`TEXT_NEAR_LINE`、`OUTSIDE_BORDER`）不要手算坐标，写操作清单 `[{"op": "place_text", "all": true}]`，运行 `edit work/plan.json ops.json work/plan2.json`，再对新文件 `check`。
+   - `PART_OVERLAP` 用 `move` 拉开器件；`PIN_OFF_GRID` 把坐标改成 10 的倍数；`TOPOLOGY_MISMATCH` 说明导线和 `pin_map` 对不上，按 finding 里的引脚改导线；内容太散或太挤用 `fit_canvas`。
+   - 重复到 `errors` 为 0。warning 能改就改，留下的在交付说明里写理由。
+5. **离线预测。** `python scripts/native_ad.py preflight work/plan2.json preflight/`。`ready_for_windows` 为 true 才继续；为 false 时按 `blocking` 逐条修。`expected_warnings` 是预计的编译 warning（例如缺封装），要在交付说明里写明。
+6. **生成工程。** `python scripts/native_ad.py create work/plan2.json out/`，得到 `.SchDoc` 和 `.PrjPcb`。任何系统生成的文件都相同，拷到 Windows 双击 `.PrjPcb` 就能用 AD 打开。不要手写或改动 SchDoc 二进制。
+7. **Windows 原生确认。** 在装有 AD 的 Windows 上运行 `verify`（编译并比较网表）和 `export`（`text_review` 必须通过）。在 Mac/Linux 上就用 `handoff work/plan2.json job/`，把 `job/` 拷到 Windows 双击 `run.bat`，拿回 `native-results/` 后运行 `receive`。
+8. **交付。** `deliver out/ delivery/ --name 项目名`。
+
+常见错误：
+
+| 现象 | 处理 |
+| --- | --- |
+| `create` 拒绝写出 | 预检还有 error，回到第 4 步 |
+| Windows 上找不到 AD | 设置 `AD_EXE` 为 `X2.EXE` 的完整路径（带不带引号都行），再运行 |
+| `run.bat` 提示缺 Python 或 Pillow | 按窗口里给的命令安装 Python 3.11+ 和 Pillow 后重跑 |
+| 运放、MOSFET 都成了方框 | 基础生成器只画矩形器件和 R/C/L/Y，这类器件用原生库，见 [原生操作与电气检查](references/native-and-electrical.md) |
+
 ## 命令速查
 
 所有命令在本技能目录下运行，输出 JSON：

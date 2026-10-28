@@ -34,7 +34,36 @@ psimsch 是 PSIM 的私有二进制格式。macOS/Linux 用 `handoff` 准备可�
 7. **核验物理量。** 频率从实际波形测；效率只在稳态、方向一致、边界合适时才叫效率。见 [物理量与测量](references/physics-and-measurement.md)。
 8. **出图与交付。** `export` 的 `text_review` 必须通过，再看全图和局部；`deliver` 生成客户目录（模型和结果）和归档目录，不打压缩包。见 [图纸、波形与交付](references/delivery.md)。
 
-Mac/Linux 不安装 PSIM；最终图纸与仿真由 Windows 返回。仿原生渲染与 RC 示例的原生导出尺寸相同，线条和文字像素 97.1% 在 1 像素内对齐，用于提前看效果；未标定的元件画成方框，不能冒充原生图形。交接任务在 Windows 运行后会对比离线预仿真与 PSIM 波形。接收原生图和数据、拒收错配结果以及比较容差，见 [交接与结果一致性](references/handoff.md)。
+Mac/Linux 不安装 PSIM；最终图纸与仿真由 Windows 返回。仿原生渲染与 RC 示例的原生导出尺寸相同，线条和文字像素 97.0% 在 1 像素内对齐，用于提前看效果；未标定的元件画成方框，不能冒充原生图形。交接任务在 Windows 运行后会对比离线预仿真与 PSIM 波形。接收原生图和数据、拒收错配结果以及比较容差，见 [交接与结果一致性](references/handoff.md)。
+
+## 逐步操作（照着做）
+
+每条命令都在本技能目录下运行，打印 JSON。只按 JSON 里的字段判断成败，不凭感觉。
+
+1. **看环境。** `python scripts/native_psim.py env`。`native_available` 为 true 表示本机有 PSIM，可以直接 `create`；为 false 时走第 7 步的构建包或交接任务。`native_look.available` 为 false 时预览会退回平滑渲染，按 `native_look.hint` 安装 Pillow 或字体。
+2. **从示例开始写计划。** 把 [assets/rc-filter-plan.json](assets/rc-filter-plan.json) 复制成 `work/plan.json` 再改，不要从空白写起。每个元件写 `type`、`name`、`attributes`（`PORTS` 首端口、`DIRECTION` 取 0/90/180/270、参数）和 `textlinks`（`FieldName`、`FieldIndex`、`AREA`）。字段名照抄示例或本机 PSIM，不要自己编。
+3. **坐标规则。** 端口和导线端点用 10 的倍数，主路元件间隔 50 的倍数；导线只写水平或竖直线段，端点落在真实端口上；输入在左、负载在右、地线在底部一条；仿真控制图标放角落。
+4. **预检到 0 error。** `python scripts/native_psim.py check work/plan.json`。看 `summary.errors`：
+   - 每条 finding 都有 `code`、`message`、`hint`，按 `hint` 改计划。
+   - 文字问题（`TEXT_OVERLAP`、`TEXT_ON_SYMBOL`、`TEXT_ON_WIRE`、`TEXT_NEAR_LINE`）不要手算坐标，写操作清单 `[{"op": "place_text", "all": true}]`，运行 `plan-edit work/plan.json ops.json work/plan2.json`，再对新文件 `check`。
+   - 导线问题（`WIRE_END_UNMATCHED`、`DIAGONAL_WIRE`、`ZERO_WIRE`）改导线端点；元件太挤就用 `move` 拉开到至少 50。
+   - 重复到 `errors` 为 0。warning 能改就改，留下的在交付说明里写理由。
+5. **看预览。** `python scripts/native_psim.py render work/plan2.json view.png`，打开 PNG 看有没有压字、线穿符号、布局散乱。
+6. **离线预测。** `python scripts/native_psim.py preflight work/plan2.json preflight/`。`ready_for_windows` 为 true 才继续；为 false 时按 `blocking` 逐条修。线性电路会附带离线预仿真，只用于检查量级，不是 PSIM 结果，不能交付。
+7. **生成 psimsch。** psimsch 只能由 PSIM 在 Windows 上写出，不要手写或用别的程序伪造：
+   - 本机有 PSIM：`python scripts/native_psim.py create work/plan2.json model.psimsch`，再 `simulate`、`export`。
+   - 本机没有 PSIM（Mac、Linux 或未装 PSIM 的 Windows）：`python scripts/native_psim.py package work/plan2.json kit/`，把 `kit/` 整个拷到装有 PSIM 和 64 位 Python 3.10+ 的 Windows 电脑，双击 `build.bat`。它会建模、求解、出图并用 PSIM 打开模型。失败时窗口停住，原因写在 `build-report.json`；改好后再双击即可，已有的模型不会被覆盖。
+   - 需要把原生结果校验后拿回来时，用 `handoff` 代替 `package`，Windows 上双击 `run.bat`，拿回 `native-results/` 后运行 `receive`。
+8. **核对结果。** `export` 的 `text_review.passed` 必须为 true；波形用 `scripts/analyze_waveform.py` 测量。最后 `deliver` 整理交付目录。
+
+常见错误：
+
+| 现象 | 处理 |
+| --- | --- |
+| `create`/`package` 拒绝生成 | 预检还有 error，回到第 4 步 |
+| Windows 上找不到 PSIM | 设置 `PSIM_DIR` 为 PSIM 安装目录（带不带引号都行），再双击 |
+| 提示 Python 版本或架构不对 | 安装与 PSIM 相同架构的 64 位 Python 3.10+，安装时勾选加入 PATH |
+| 预览里有带类型名的方框 | 该元件没有标定图形，属正常；端口位置以原生导出为准 |
 
 ## 命令速查
 
