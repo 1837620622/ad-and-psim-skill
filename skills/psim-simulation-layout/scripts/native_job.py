@@ -187,12 +187,20 @@ def _fill_job(tool, folder, plan, name, dependencies, check):
         png = command(HERE / f'native_{tool}.py', ['render', staged_plan, folder / 'preview.render.png'], cwd=folder)
         if png['exit_code']:
             raise RuntimeError('生成便携 PNG 失败：' + json.dumps(png, ensure_ascii=False))
+    # 离线预测：Windows 运行后与原生结果对照，记录预测是否命中。
+    forecast = command(HERE / f'native_{tool}.py', ['preflight', staged_plan, folder / 'preflight'], cwd=folder)
+    forecast = forecast['result'] if isinstance(forecast['result'], dict) else {'error': forecast['stderr']}
     request = {
         'schema_version': SCHEMA,
         'tool': tool,
         'name': name,
         'plan_sha256': digest(staged_plan),
         'layout_check': check['result'],
+        'preflight': {
+            key: forecast.get(key)
+            for key in ('ready_for_windows', 'blocking', 'expected_native', 'error')
+            if key in forecast
+        },
         'portable_preview': {'path': 'preview.render.svg', 'source': 'portable_render', 'native_verified': False},
         'files': inventory(folder),
     }
@@ -275,7 +283,7 @@ def run(job, *, ad_exe=None, psim_dir=None, timeout=180):
                 raise RuntimeError('Windows 生成的 SchDoc 与准备端生成的文件字节不一致')
             report['prepared_schdoc_byte_identical'] = True
             expected = project / 'expected.json'
-            stage(
+            verified = stage(
                 'verify',
                 [
                     'verify',
@@ -285,11 +293,13 @@ def run(job, *, ad_exe=None, psim_dir=None, timeout=180):
                 ],
             )
             picture = stage('export', ['export', schematic, output / 'drawing'])
+            report['forecast'] = _forecast_ad(request, verified)
         else:
             report['solver'] = stage('version', ['version'])
             schematic = project / f'{name}.psimsch'
             stage('create', ['create', plan, schematic])
-            stage('simulate', ['simulate', schematic, output / 'waveforms'])
+            simulated = stage('simulate', ['simulate', schematic, output / 'waveforms'])
+            report['forecast'] = _forecast_psim(job / 'preflight/presim.csv', simulated)
             picture = stage('export', ['export', schematic, output / f'drawing/{name}.emf'])
         if not picture.get('text_review', {}).get('passed'):
             raise RuntimeError('原生文字审查未通过')
@@ -303,6 +313,41 @@ def run(job, *, ad_exe=None, psim_dir=None, timeout=180):
     report['files'] = inventory(output)
     write_json(output / RESULT, report)
     return dict(report, result_folder=str(output))
+
+
+def _forecast_ad(request, verified):
+    """对照离线预测的编译 warning 数与原生编译结果。"""
+    expected = (request.get('preflight') or {}).get('expected_native') or {}
+    predicted = expected.get('compile_warnings_missing_footprint')
+    actual = (verified or {}).get('warnings')
+    return {
+        'predicted_compile_warnings': predicted,
+        'native_compile_warnings': actual,
+        'match': predicted is not None and predicted == actual,
+    }
+
+
+def _forecast_psim(presim, simulated):
+    """把离线预仿真波形与 PSIM 原生波形按同一时间点比较；只记录，不影响原生结果是否通过。"""
+    if not presim.is_file() or not isinstance(simulated, dict) or not simulated.get('csv'):
+        return {'status': 'no_presim'}
+    try:
+        from compare_results import compare_waveforms
+
+        with presim.open(encoding='utf-8') as stream:
+            columns = stream.readline().strip().split(',')
+        common = [c for c in columns if c != 'Time' and c in simulated.get('columns', [])]
+        if not common:
+            return {'status': 'no_common_columns', 'presim_columns': columns}
+        result = compare_waveforms(simulated['csv'], presim, signals=common, atol=1e-3, rtol=1e-3)
+    except (ValueError, OSError) as error:
+        return {'status': 'not_compared', 'reason': str(error)}
+    return {
+        'status': 'compared',
+        'agreement': result['equivalence'],
+        'signals': {k: v['max_absolute_error'] for k, v in result['signals'].items()},
+        'tolerance': result['tolerances'],
+    }
 
 
 def receive(job, returned, output):

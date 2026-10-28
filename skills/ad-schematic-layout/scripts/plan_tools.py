@@ -349,8 +349,104 @@ def apply_edits(plan, operations):
             _fit_canvas(plan, op.get('margin', 40))
         elif kind == 'set_pin_map':
             plan['pin_map'] = dict(op['pin_map'])
+        elif kind == 'place_text':
+            plan = place_text(plan, op.get('refs'))
         else:
             raise ValueError(f'未知编辑操作：{kind!r}')
+    return plan
+
+
+TEXT_CODES = ('TEXT_OVERLAP', 'TEXT_ON_GRAPHICS', 'TEXT_ON_PART')
+
+
+def _text_problems(plan):
+    """返回 (文字类问题列表, 预检模型, 文字列表)。"""
+    from check_layout import check_records
+    from native_ad import build
+
+    sheet = build(plan)
+    result, model, texts = check_records(sheet.records, plan.get('pin_map'), grid=plan.get('grid', 10))
+    return [f for f in result['findings'] if f['code'] in TEXT_CODES], model, texts
+
+
+def _owner(text):
+    owner = text.get('owner')
+    return owner.get('ref') if isinstance(owner, dict) else owner
+
+
+def _label_candidates(part, texts, model):
+    """位号与参数的候选位置（左下角锚点）：上方叠放、下方叠放、上下分开、右侧、左侧。"""
+    from check_layout import text_width
+
+    shapes = next((v for v in model['parts'].values() if v.get('ref') == part['ref']), None)
+    if not shapes or not shapes.get('body'):
+        return []
+    x1, y1, x2, y2 = shapes['body']
+    own = {t['kind']: t for t in texts if _owner(t) == part['ref'] and t['kind'] in ('designator', 'comment')}
+    if set(own) != {'designator', 'comment'}:
+        return []
+    pt = own['designator']['pt']
+    h, gap, line = round(pt), 3, round(1.1 * pt)
+    wd = math.ceil(text_width(own['designator']['text'], pt))
+    wc = math.ceil(text_width(own['comment']['text'], pt))
+    cy = round((y1 + y2) / 2)
+    x1, y1, x2, y2 = math.floor(x1), math.floor(y1), math.ceil(x2), math.ceil(y2)
+    above = ((x1, y2 + gap + line), (x1, y2 + gap))
+    below = ((x1, y1 - gap - h), (x1, y1 - gap - h - line))
+    split = ((x1, y2 + gap), (x1, y1 - gap - h))
+    right = ((x2 + gap, cy + 1), (x2 + gap, cy - 1 - h))
+    left = ((x1 - gap - wd, cy + 1), (x1 - gap - wc, cy - 1 - h))
+    # 每个方位再向外多挪 5、10 个单位，拥挤处也能找到空位。
+    outward = {
+        above: (0, 1, 0, 1),
+        below: (0, -1, 0, -1),
+        split: (0, 1, 0, -1),
+        right: (1, 0, 1, 0),
+        left: (-1, 0, -1, 0),
+    }
+    order = (right, left, above, below) if y2 - y1 > x2 - x1 else (above, below, split, right, left)
+    result = []
+    for step in (0, 5, 10):
+        for d, c in order:
+            ux, uy, vx, vy = outward[(d, c)]
+            moved = ((d[0] + ux * step, d[1] + uy * step), (c[0] + vx * step, c[1] + vy * step))
+            result.append({'designator_at': list(moved[0]), 'comment_at': list(moved[1])})
+    return result
+
+
+def place_text(plan, refs=None):
+    """自动摆放位号和参数：对压字、压线、落进别的器件框的文字逐个试候选位置，取问题最少的。
+
+    已经没有文字问题的计划原样返回；只动 refs 指定的器件（默认全部有关器件）。
+    """
+    plan = copy.deepcopy(plan)
+    problems, model, texts = _text_problems(plan)
+    if not problems:
+        return plan
+    wanted = set(refs) if refs else None
+    for _ in range(2):
+        spots = [tuple(f['at'][:2]) for f in problems if 'at' in f]
+        involved = []
+        for part in plan.get('parts', []):
+            own = [t for t in texts if _owner(t) == part['ref']]
+            near = any(abs(t['ink'][0] - x) < 25 and abs(t['ink'][1] - y) < 25 for t in own for x, y in spots)
+            if near and (wanted is None or part['ref'] in wanted):
+                involved.append(part)
+        for part in involved:
+            best = (len(problems), None)
+            for candidate in _label_candidates(part, texts, model):
+                trial = copy.deepcopy(plan)
+                _part(trial, part['ref']).update(candidate)
+                count = len(_text_problems(trial)[0])
+                if count < best[0]:
+                    best = (count, candidate)
+                if count == 0:
+                    break
+            if best[1] is not None:
+                part.update(best[1])
+                problems, model, texts = _text_problems(plan)
+            if not problems:
+                return plan
     return plan
 
 

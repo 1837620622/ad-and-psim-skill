@@ -8,7 +8,7 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab)
 ![Windows | macOS | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555555)
 ![Agent Skills](https://img.shields.io/badge/Agent%20Skills-2%20skills-6f42c1)
-![MCP](https://img.shields.io/badge/MCP-29%20tools-0a7ea4)
+![MCP](https://img.shields.io/badge/MCP-32%20tools-0a7ea4)
 
 给 AI 编程助手用的两项技能：按一句话需求做出**可编辑的 Altium Designer 原理图**和**用 PSIM 真实求解的仿真模型**，排版按正式工程图的规则逐项检查。交付的是原生工程文件，不是图片。
 
@@ -16,11 +16,12 @@
 
 > **专有商业授权，不是开源项目。** 使用、修改和集成需要书面授权，见 [LICENSE](LICENSE)。联系微信：**1837620622（传康Kk）**。
 
-| AD 示例（便携渲染） | PSIM 示例（便携渲染） |
-| --- | --- |
-| ![AD RC 示例](docs/images/ad-rc-render.png) | ![PSIM RC 示例](docs/images/psim-rc-render.png) |
+| | AD 示例 | PSIM 示例 |
+| --- | --- | --- |
+| Windows 原生导出 | ![AD 原生导出](docs/images/ad-native-rc.png) | ![PSIM 原生导出](docs/images/psim-native-rc.png) |
+| Mac/Linux 仿原生（没装 AD/PSIM） | ![AD 仿原生](docs/images/ad-rc-render.png) | ![PSIM 仿原生](docs/images/psim-rc-render.png) |
 
-两张图由本包的便携渲染器生成，不需要安装 AD 或 PSIM；原生导出与验证记录见 [docs/VALIDATION.md](docs/VALIDATION.md)。
+第二行由本包在没装 AD、PSIM 的 Linux 上生成。和第一行的 Windows 原生导出逐像素比较：图像尺寸相同；只看线条和文字（不算白底），AD 有 97.8%、PSIM 有 97.1% 的像素在 1 像素内对齐，剩下的差别主要是文字边缘的抗锯齿。比较方法见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 
 ## 能做什么
 
@@ -29,7 +30,8 @@
 | 建模 | 生成 SchDoc + PrjPcb，在任何系统上字节一致 | 生成 Windows 构建包，由 PSIM 写出 psimsch |
 | 改现有图 | 导入 SchDoc → 按操作清单修改 → 重新生成，连线自动正交重连 | 按操作清单修改计划，移动元件时导线自动绕开符号 |
 | 排版检查 | 栅格、悬空线、隐式短路、预测网表、文字重叠与压线、穿件导线、画面密度、参数写法 | 导线、栅格、文字重叠与压线、导线穿符号、仿真控制位置、参数写法 |
-| 预览 | 离线便携渲染；接收 Windows 原生 PNG 后直接显示原图 | 离线便携渲染；接收 Windows 原生 PNG 后直接显示原图 |
+| 预览 | 仿 Windows 原生出图（同比例、同线宽、ClearType 式文字）；接收 Windows 原生 PNG 后直接显示原图 | 仿 Windows 原生出图（同取景、按原生规则摆文字）；接收 Windows 原生 PNG 后直接显示原图 |
+| 上 Windows 之前 | 预测编译 warning、网表和图面（`preflight`） | 按原生规则预测文字位置；线性电路离线预仿真（`presim`） |
 | 跨系统交接 | Mac/Linux 准备任务，Windows 编译出图，再校验接收 | Mac/Linux 准备任务，Windows 原生求解，再接收 SMV/CSV 与原图 |
 | 原生（Windows） | 编译、逐引脚网表比较、原生出图、窗口截图 | 建模、改参数、求解、波形读回、原生出图、窗口截图 |
 | 结果核验 | 原生 EMF 上的文字重叠、越界、压线审查 | 同左；另有按时间加权的功率、效率、RMS、门极频率测量 |
@@ -39,10 +41,11 @@
 
 1. **写计划**：把需求整理成 JSON，写明器件、参数、坐标和连线。
 2. **排版预检**（`check`）：有 error 就停下修改，不往下走。
-3. **生成**：AD 写出 SchDoc + PrjPcb；PSIM 生成构建包，或在 Windows 上直接原生建模。
-4. **原生核验**（Windows）：AD 编译并逐引脚比对网表；PSIM 原生求解并读回波形。
-5. **原生出图**：检查文字重叠、越界和压线，再人工看图。
-6. **交付**：客户目录加过程归档。
+3. **离线预测**（`preflight`）：仿原生预览、预计的编译 warning、PSIM 离线预仿真；`ready_for_windows` 为 true 再上 Windows。
+4. **生成**：AD 写出 SchDoc + PrjPcb；PSIM 生成构建包，或在 Windows 上直接原生建模。
+5. **原生核验**（Windows）：AD 编译并逐引脚比对网表；PSIM 原生求解并读回波形。
+6. **原生出图**：检查文字重叠、越界和压线，再人工看图。
+7. **交付**：客户目录加过程归档。
 
 每一步都输出 JSON，模型逐条读取、逐条修正，不靠模型自己判断"差不多"。
 
@@ -51,7 +54,7 @@
 | 用途 | 需要 |
 | --- | --- |
 | 预检、生成、修改、渲染为 SVG、构建包、交付 | Python 3.10+（只用标准库），Windows、macOS、Linux 均可 |
-| 渲染为 PNG | 可选 resvg-py 或 Pillow：`python -m pip install -r requirements-optional.txt` |
+| 渲染为 PNG | 仿原生出图需要 Pillow 和 Times New Roman/Arial（Windows、macOS 自带）或字宽相同的 Liberation 字体（Linux：`fonts-liberation`）；没有时用 resvg-py 或 Pillow 平滑渲染。可选依赖：`python -m pip install -r requirements-optional.txt` |
 | Windows 原生 EMF 转 PNG、截图格式转换 | Python 3.11+、Pillow 13（已包含在上述可选依赖中） |
 | 用 npx 安装或启动 MCP | Node.js 18+ |
 | AD 编译与原生出图 | Windows + 已授权的 Altium Designer（验证过 Enterprise 26.4.1） |
@@ -59,7 +62,7 @@
 
 其他软件版本没有验证过，不在承诺范围内。
 
-可选依赖按 Python 版本安装：3.10 只装 resvg-py（便携 PNG）；3.11+ 另装 Pillow 13（Windows 原生 EMF 转 PNG），不会退回带已知漏洞的旧版 Pillow。resvg-py 不需要另装 Cairo，装上后 `render` 自动使用；也可以用 `--renderer resvg` 或 `--renderer pillow` 指定，用 `--font-file`、`--font-dir`、`--no-system-fonts` 固定字体。各后端的对比和字体说明见 [预览后端](docs/preview-backends.md)。
+可选依赖按 Python 版本安装：3.10 只装 resvg-py（只有平滑预览，没有仿原生出图）；3.11+ 另装 Pillow 13（仿原生出图、Windows 原生 EMF 转 PNG），不会退回带已知漏洞的旧版 Pillow。`render` 默认用仿原生出图（`--renderer gdi`），也可以用 `--renderer resvg` 或 `--renderer pillow` 指定，用 `--font-file`、`--font-dir` 指定字体文件。各后端的对比和字体说明见 [预览后端](docs/preview-backends.md)。
 
 ## Windows、macOS、Linux 都能用
 
@@ -67,13 +70,22 @@ AD 和 PSIM 只有 Windows 版。本包把能脱离软件完成的工作都做�
 
 | 工作 | Windows | macOS / Linux |
 | --- | --- | --- |
-| 写计划、排版预检、便携渲染、修改计划 | ✓ | ✓ |
+| 写计划、排版预检、修改计划 | ✓ | ✓ |
+| 仿原生预览、离线预测（`preflight`）、PSIM 离线预仿真 | ✓ | ✓ |
 | AD：生成 SchDoc + PrjPcb | ✓ | ✓（文件与 Windows 上生成的完全相同） |
 | PSIM：生成构建包 | ✓ | ✓（拷到装有 PSIM 的 Windows 电脑双击 `build.bat`） |
 | AD 编译与出图、PSIM 建模与求解、窗口截图 | ✓（需装软件） | 交给有软件的 Windows 电脑 |
 | 波形测量、整理交付 | ✓ | ✓ |
 
 Mac/Linux 不用装 AD/PSIM：AD 文件可以直接在 Mac/Linux 上生成，交付前到 Windows 原生编译、出图；PSIM 模型和仿真结果都由 Windows 上的 PSIM 生成。具体做法见「使用」里的[在 Mac/Linux 上准备，交给 Windows 运行](#在-maclinux-上准备交给-windows-运行)。
+
+### 怎样做到和 Windows 上看到的一样
+
+- **同一份文件**：AD 的 SchDoc 在任何系统上生成都字节相同。
+- **同样的出图**：仿原生渲染按 Windows 原生导出逐像素标定，包括像素比例、线宽、取整方式、ClearType 式彩边文字，以及 PSIM 的文字定位规则（文字起点 = AREA 水平中心 - FormatFactor）。
+- **同样的字宽**：macOS 自带 Times New Roman 和 Arial；Linux 用字宽逐字相同的 Liberation 字体，文字位置和换行与 Windows 一致，只是字形细节略有不同。`env` 会显示当前用的是哪套字体。
+- **提前知道结果**：`preflight` 预测 AD 编译会报的 warning（RC 示例预测 4 条缺少封装，与 Windows 实测一致）；PSIM 线性电路用与 PSIM 同类的算法（节点分析 + 固定步长梯形积分）离线预仿真，RC 示例与解析解最大偏差约 0.00003 V。
+- **回来自动对账**：交接任务在 Windows 上运行后，返回结果里记录预测的 warning 数与实际是否一致，以及离线预仿真与 PSIM 波形的逐点偏差。
 
 ## 安装
 
@@ -152,6 +164,11 @@ python $AD/scripts/native_ad.py render work/ad/RC_Filter.SchDoc work/ad/view.png
 PSIM=skills/psim-simulation-layout
 python $PSIM/scripts/native_psim.py check   $PSIM/assets/rc-filter-plan.json
 python $PSIM/scripts/native_psim.py package $PSIM/assets/rc-filter-plan.json work/psim-kit
+
+# 上 Windows 之前：离线预测（仿原生预览、预计的编译 warning、PSIM 离线预仿真）
+python $AD/scripts/native_ad.py preflight $AD/assets/rc-filter-plan.json work/preflight-ad
+python $PSIM/scripts/native_psim.py preflight $PSIM/assets/rc-filter-plan.json work/preflight-psim
+python $PSIM/scripts/native_psim.py presim $PSIM/assets/rc-filter-plan.json work/presim.csv
 ```
 
 全部命令见 [AD 命令](skills/ad-schematic-layout/references/commands.md) 和 [PSIM 命令](skills/psim-simulation-layout/references/commands.md)。
@@ -176,6 +193,8 @@ python $PSIM/scripts/native_psim.py receive work/job-psim work/returned-psim wor
 
 接收时逐个核对请求、计划和每个文件的 SHA-256；计划对不上、原生检查失败或文件被改过，都会拒收。PNG、SMV、CSV 原样复制，不重画、不重算。参数文件等依赖在准备时用 `--include params.txt` 带上。
 
+任务目录里还带着 `preflight/` 的离线预测；Windows 运行后，返回清单的 `forecast` 一项记录预测和实际的对照（AD：预计与实际的编译 warning 数；PSIM：离线预仿真与 PSIM 波形的最大偏差）。
+
 | 图 | 能说明什么 |
 | --- | --- |
 | 任务目录里的 `preview.render.png/svg` | 离线近似预览，用来查布局；字体和未标定器件可能与原生软件不同 |
@@ -192,7 +211,7 @@ python $AD/scripts/native_ad.py compare reference/drawing.png work/final-ad/draw
 
 ### MCP
 
-MCP 服务器只用 Python 标准库，提供 29 个工具，可以读取、修改、检查、渲染当前图纸，准备交给 Windows 的任务，接收并比较原生结果。
+MCP 服务器只用 Python 标准库，提供 32 个工具，可以读取、修改、检查、渲染当前图纸，上 Windows 之前预测结果，准备交给 Windows 的任务，接收并比较原生结果。
 
 ```bash
 claude mcp add ad-psim -- npx -y github:1837620622/ad-and-psim-skill mcp    # Claude Code
@@ -219,12 +238,13 @@ args = ["-y", "github:1837620622/ad-and-psim-skill", "mcp"]
 不想用 Node 时，把命令换成 `python`，参数换成 `["<仓库>/skills/ad-schematic-layout/scripts/mcp_server.py", "--with", "<仓库>/skills/psim-simulation-layout/scripts"]`。
 
 <details>
-<summary>29 个工具一览</summary>
+<summary>32 个工具一览</summary>
 
 | 用途 | AD | PSIM |
 | --- | --- | --- |
 | 环境检查 | `ad_env` | `psim_env` |
 | 排版预检 | `ad_check` | `psim_check` |
+| 上 Windows 前预测 | `ad_preflight` | `psim_preflight`、`psim_presim` |
 | 读入与修改 | `ad_import`、`ad_edit` | `psim_plan_edit`、`psim_inspect`、`psim_edit` |
 | 生成 | `ad_create` | `psim_package`、`psim_create` |
 | 预览与截图 | `ad_render`、`ad_screenshot` | `psim_render`、`psim_screenshot` |
@@ -242,7 +262,7 @@ args = ["-y", "github:1837620622/ad-and-psim-skill", "mcp"]
 
 "好看"被写成了具体数字，并由程序判定，不依赖模型的审美：
 
-1. **计划预检**：栅格、连接、文字间距、比例、密度和参数写法，0 error 才能生成文件。
+1. **计划预检**：栅格、连接、文字间距、比例、密度和参数写法，0 error 才能生成文件。文字互相重叠是 error；位号和参数压字压线时，用编辑操作 `place_text` 自动摆到不冲突的位置。
 2. **原生连接**（AD）或**原生求解**（PSIM）。
 3. **原生图面**：在原生导出的 EMF 上查文字重叠、越界和被线穿过，然后人工看图。
 
@@ -276,9 +296,9 @@ python $PSIM/scripts/native_psim.py deliver work/ delivery/ --name 项目名    
 
 不会。生成器在任何系统上写出的字节完全相同，测试里固定了示例文件的 SHA-256。
 
-**PSIM 为什么要先生成构建包？**
+**能不能在 Mac 上直接生成双击就能打开的 psimsch？**
 
-psimsch 是私有二进制格式，模型由目标 Windows 上的 PSIM 创建、求解和验证。构建包内有计划、脚本和 `build.bat`；跨系统交接用 `handoff` 和 `run.bat`，还会生成可校验的返回清单。文件兼容性和实际求解版本分别记录。
+不能。psimsch 是 PSIM 不公开的私有格式，连 Typhoon HIL、SIMBA 这类商业工具也要先在 PSIM 里导出网表才能读。所以本包在 Mac/Linux 上生成构建包：拷到装有 PSIM 的 Windows 电脑双击 `build.bat`，由 PSIM 自己写出 psimsch、求解、出图，最后自动在 PSIM 里打开做好的模型。AD 不一样：SchDoc 和 PrjPcb 在任何系统上都能直接生成，拷到 Windows 双击就能在 AD 里打开（也可以用 `native_ad.py open`）。跨系统交接用 `handoff` 和 `run.bat`，另有可校验的返回清单。
 
 **技能和 MCP 选哪个？**
 
@@ -292,9 +312,17 @@ psimsch 是私有二进制格式，模型由目标 Windows 上的 PSIM 创建、
 
 不会。导入只读取原图纸，修改写到你指定的新文件；PSIM 原生改参数另存副本；交付只复制文件。
 
-**便携渲染能直接给客户吗？**
+**仿原生预览能直接给客户吗？**
 
-不建议。便携渲染是调试用的近似图，对外请用原生导出或真实截图。
+不建议。它和 Windows 原生导出差别很小，但仍是预测出来的图；对外请用 Windows 原生导出，或用 `receive` 接收回来的原图。
+
+**Linux 上的字为什么和 Windows 略有不同？**
+
+Linux 默认用 Liberation 字体，字宽和 Times New Roman、Arial 逐字相同，所以文字位置、换行和是否压线都一致，只是笔画细节稍有差别。有授权的 Times New Roman、Arial 字体文件时，用 `--font-file` 指定即可。
+
+**离线预仿真能代替 PSIM 吗？**
+
+不能。它只支持线性元件（R、L、C、直流源、正弦源、电压探头），用来在上 Windows 前确认参数、拓扑和波形量级；有开关、二极管或控制电路时直接拒绝。交付的波形必须来自 PSIM。
 
 ## 目录结构
 
@@ -313,7 +341,7 @@ ad-and-psim-skill/
 
 ## 验证状态
 
-- 可移植部分（预检、生成、导入与修改、渲染、交接与接收、结果比较、MCP、安装器）有自动测试；CI 矩阵配置 Windows、macOS、Linux 与 Python 3.10/3.13：`python -m unittest discover -s tests -v`。实际运行情况见 Actions 和验证记录。
+- 可移植部分（预检、生成、导入与修改、渲染、交接与接收、结果比较、离线预测与预仿真、MCP、安装器）有自动测试，其中仿原生出图直接和仓库里的 Windows 原生导出逐像素比较；CI 矩阵配置 Windows、macOS、Linux 与 Python 3.10/3.13：`python -m unittest discover -s tests -v`。实际运行情况见 Actions 和验证记录。
 - 原生部分在 AD Enterprise 26.4.1、PSIM 2026.0.0.7209 上验证过；记录、边界和待复验的项目见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 - Codex 的技能发现实际验证过；其他宿主按官方文档的目录适配，未逐个运行完整设计任务。
 

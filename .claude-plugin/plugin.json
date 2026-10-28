@@ -1,6 +1,6 @@
 {
   "name": "ad-and-psim-skill",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Altium Designer and PSIM skills: native modeling, deterministic layout checks, portable rendering, screenshots, clean delivery and an MCP server. Proprietary commercial authorization required.",
   "author": {
     "name": "传康Kk（万能程序员）"

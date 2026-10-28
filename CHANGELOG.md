@@ -1,5 +1,26 @@
 # 更新记录 / Changelog
 
+## 1.3.0
+
+### 新增 / Added
+
+- 仿 Windows 原生出图（`--renderer gdi`，PNG 默认）：按仓库里的原生导出逐像素标定比例、线宽、取整和 ClearType 式文字；RC 示例与原生图尺寸相同，线条和文字像素 AD 97.8%、PSIM 97.1% 在 1 像素内对齐（不计白底）。优先用系统的 Times New Roman/Arial，没有时用字宽相同的 Liberation 字体；`env` 显示所用字体。
+- `preflight`：上 Windows 前的离线预测。AD 给出预计的编译 error/warning（RC 示例预测 4 条缺少封装，与实测一致）和网表对照；PSIM 给出仿原生预览和离线预仿真。`ready_for_windows` 为 true 时没有已知阻碍。
+- `presim`（PSIM）：用与 PSIM 同类的算法（节点分析 + 固定步长梯形积分）离线预仿真 R、L、C、直流源、正弦源和电压探头组成的线性电路，输出 CSV 并检查步长和时长；其他元件直接拒绝。
+- 交接任务带上离线预测；Windows 运行后返回清单的 `forecast` 记录预测与实际的对照。
+- `place_text` 编辑操作（AD、PSIM）：自动把压字、压线、压符号的位号和参数挪到第一个没有冲突的位置。
+- `open` 命令：Windows 上用 AD 打开工程、用 PSIM 打开模型；PSIM 构建包最后自动打开做好的 psimsch（`PSIM_NO_OPEN` 可跳过）。
+- MCP 增加 `ad_preflight`、`psim_preflight`、`psim_presim`，共 32 个工具。
+
+### 改进 / Changed
+
+- 文字互相重叠改为 error：AD、PSIM 预检有文字重叠时不生成文件。
+- PSIM 文字位置按原生规则估算（起点 = AREA 水平中心 - FormatFactor，字号 6/7·|FontSize|），与原生导出实测相差不超过 2 个单位；电源和探头按圆形判断压字，同一文字压同一元件只报一次。
+- PSIM 电阻锯齿和 AD 引脚号位置按原生导出重新标定。
+- 交付时 `preflight/` 目录和 presim 文件进归档目录，不会被当成 PSIM 结果交给客户。
+
+This release adds a Windows-look renderer calibrated against native exports, offline forecasts (`preflight`), linear PSIM pre-simulation (`presim`), automatic label placement (`place_text`) and one-click opening on Windows. Overlapping text is now an error in both checkers. psimsch remains PSIM's closed format: it is written by PSIM itself on Windows and then opened automatically.
+
 ## 1.2.1
 
 ### 改进 / Changed

@@ -1,8 +1,8 @@
 """PSIM 建模计划的排版预检：导线、栅格、关联文字重叠、文字压线、仿真控制位置与参数写法。
 
-PSIM 元件图形由原生库决定，计划里通常只写首端口；本工具只对已标定的常用元件估算符号范围，
-文字按 TEXTLINK 的 AREA 保守判断。结果用于原生创建前的快速把关，最终以原生导出和
-review_emf_text.py 的审查为准。
+PSIM 元件图形由原生库决定，计划里通常只写首端口；本工具只对已标定的常用元件估算符号范围。
+关联文字按原生定位规则（起点 = AREA 水平中心 - FormatFactor）和 Arial 字宽估算实际位置。
+结果用于原生创建前的快速把关，最终以原生导出和 review_emf_text.py 的审查为准。
 """
 
 import argparse
@@ -12,10 +12,10 @@ from pathlib import Path
 import re
 import sys
 
-from psim_plan import SYMBOLS, crosses, ports as element_ports, symbol_box
+from psim_plan import SYMBOLS, crosses, part_overlaps, ports as element_ports, symbol_box, symbol_parts, text_box
 
 LIMITATIONS = (
-    '只对已标定元件估算符号范围，文字按 AREA 整框判断；端口与图形以本机原生库为准。'
+    '只对已标定元件估算符号范围，文字位置按原生定位规则估算；端口与图形以本机原生库为准。'
     '通过预检不等于原生创建、求解或出图通过，仍须查看原生导出。'
 )
 
@@ -67,7 +67,7 @@ def check_plan(plan, grid=10):
         item.update(extra)
         findings.append(item)
 
-    wires, symbols, texts, ports, clocks, uncalibrated = [], [], [], [], [], set()
+    wires, symbols, parts, texts, ports, clocks, uncalibrated = [], [], [], [], [], [], set()
     font_sizes = {}
     for e in elements:
         kind = str(e.get('type', '')).upper()
@@ -100,6 +100,7 @@ def check_plan(plan, grid=10):
             ports.extend(element_ports(e))
             if box:
                 symbols.append((name or kind, box))
+                parts.extend((name or kind, part) for part in symbol_parts(e))
             if kind not in SYMBOLS or SYMBOLS[kind].get('calibrated') is False:
                 uncalibrated.add(kind)
             if any(abs(v / grid - round(v / grid)) > 1e-9 for v in start):
@@ -123,7 +124,7 @@ def check_plan(plan, grid=10):
             size = abs(float(label.get('FontSize', -15)))
             font_sizes.setdefault(size, []).append(f'{name}.{field}')
             value = attrs.get(field)
-            texts.append({'owner': name, 'field': field, 'box': box, 'text': name if field == 'Name' else value})
+            texts.append({'owner': name, 'field': field, 'area': box, 'box': text_box(e, label)})
             if field != 'Name' and value is not None and scientific(value):
                 add(
                     'warning',
@@ -184,27 +185,28 @@ def check_plan(plan, grid=10):
         for j in range(i + 1, len(texts)):
             if overlap(t['box'], texts[j]['box'], 0.5):
                 add(
-                    'warning',
+                    'error',
                     'TEXT_OVERLAP',
                     f'关联文字重叠：{t["owner"]}.{t["field"]} 与 {texts[j]["owner"]}.{texts[j]["field"]}',
-                    '错开 AREA，同一元件的位号和参数上下排列。',
+                    '错开 AREA，同一元件的位号和参数上下排列；或用编辑操作 {"op": "place_text"} 自动摆放。',
                     t['box'][:2],
                 )
-        for name, box in symbols:
-            if overlap(t['box'], box, 0.5):
-                add(
-                    'warning',
-                    'TEXT_ON_SYMBOL',
-                    f'{t["owner"]}.{t["field"]} 的文字区压到 {name} 的符号',
-                    '把 AREA 移到符号外侧，与图形留至少 3 个单位。',
-                    t['box'][:2],
-                )
+        # 同一段文字压到同一个元件只报一次（元件按引线、主体分块判断）。
+        for name in dict.fromkeys(name for name, part in parts if part_overlaps(part, t['box'], 0.5)):
+            add(
+                'warning',
+                'TEXT_ON_SYMBOL',
+                f'{t["owner"]}.{t["field"]} 的文字压到 {name} 的符号',
+                '移动 AREA（文字起点 = AREA 水平中心 - FormatFactor），与图形留至少 3 个单位；'
+                '或用编辑操作 {"op": "place_text"} 自动摆放。',
+                t['box'][:2],
+            )
         for clock in clocks:
             if overlap(t['box'], clock, 0.5):
                 add(
                     'warning',
                     'TEXT_ON_SYMBOL',
-                    f'{t["owner"]}.{t["field"]} 的文字区压到仿真控制图标',
+                    f'{t["owner"]}.{t["field"]} 的文字压到仿真控制图标',
                     '把仿真控制移到图纸角落。',
                     t['box'][:2],
                 )
@@ -213,8 +215,8 @@ def check_plan(plan, grid=10):
                 add(
                     'warning',
                     'TEXT_ON_WIRE',
-                    f'{t["owner"]}.{t["field"]} 的文字区被导线穿过',
-                    '文字放在导线旁的空白处。',
+                    f'{t["owner"]}.{t["field"]} 的文字被导线穿过',
+                    '文字放在导线旁的空白处，或用编辑操作 {"op": "place_text"} 自动摆放。',
                     t['box'][:2],
                 )
                 break

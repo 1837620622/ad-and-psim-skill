@@ -8,7 +8,7 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab)
 ![Windows | macOS | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555555)
 ![Agent Skills](https://img.shields.io/badge/Agent%20Skills-2%20skills-6f42c1)
-![MCP](https://img.shields.io/badge/MCP-29%20tools-0a7ea4)
+![MCP](https://img.shields.io/badge/MCP-32%20tools-0a7ea4)
 
 Two skills for AI coding agents: turn a plain-language request into an **editable Altium Designer schematic** or a **PSIM model solved by PSIM itself**, with the layout checked rule by rule against formal drawing practice. The output is native project files, not pictures.
 
@@ -16,11 +16,12 @@ Use them as skills in Claude Code, Codex, Gemini CLI, GitHub Copilot, Cursor, Op
 
 > **Proprietary commercial project, not open source.** Use, modification and integration require written authorization; see [LICENSE](LICENSE). WeChat: **1837620622**.
 
-| AD example (portable render) | PSIM example (portable render) |
-| --- | --- |
-| ![AD RC example](docs/images/ad-rc-render.png) | ![PSIM RC example](docs/images/psim-rc-render.png) |
+| | AD example | PSIM example |
+| --- | --- | --- |
+| Windows native export | ![AD native export](docs/images/ad-native-rc.png) | ![PSIM native export](docs/images/psim-native-rc.png) |
+| Mac/Linux Windows-look render (no AD/PSIM) | ![AD Windows-look render](docs/images/ad-rc-render.png) | ![PSIM Windows-look render](docs/images/psim-rc-render.png) |
 
-Both images come from this package's portable renderer, with no AD or PSIM installed. Native exports and validation records are in [docs/VALIDATION.md](docs/VALIDATION.md).
+The second row was produced by this package on Linux without AD or PSIM. Compared pixel by pixel with the Windows native exports in the first row, the images have the same size, and counting only lines and text (not the white background) 97.8% (AD) and 97.1% (PSIM) of the pixels line up within one pixel; the remaining differences are mostly anti-aliasing at text edges. The method is in [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## What it does
 
@@ -29,7 +30,8 @@ Both images come from this package's portable renderer, with no AD or PSIM insta
 | Modeling | Writes SchDoc + PrjPcb, byte-identical on every OS | Builds a Windows kit; PSIM writes the psimsch |
 | Editing existing work | Import SchDoc → apply edit operations → regenerate; wires re-route orthogonally | Edit the plan; moved elements drag their wires around symbols |
 | Layout check | Grid, dangling wires, implicit shorts, predicted netlist, text overlap and text over lines, wires through parts, sheet density, value notation | Wires, grid, text overlap and text over lines, wires through symbols, simulation-control placement, value notation |
-| Preview | Offline render; display the original native PNG returned by Windows | Offline render; display the original native PNG returned by Windows |
+| Preview | Windows-look render (same scale, line widths and ClearType-style text); display the original native PNG returned by Windows | Windows-look render (same framing, native text placement); display the original native PNG returned by Windows |
+| Before Windows | Predict compile warnings, netlist and drawing (`preflight`) | Predict text positions by the native rule; offline pre-simulation of linear circuits (`presim`) |
 | Cross-OS handoff | Prepare on Mac/Linux, compile/export on Windows, verify returned files | Prepare on Mac/Linux, solve on Windows, receive native PNG/SMV/CSV |
 | Native (Windows) | Compile, pin-level netlist comparison, native export, window screenshot | Create, edit parameters, solve, read back waveforms, native export, window screenshot |
 | Result checks | Text overlap, clipping and text-over-line review on the native EMF | Same, plus time-weighted power, efficiency, RMS and gate-frequency measurements |
@@ -39,10 +41,11 @@ Both images come from this package's portable renderer, with no AD or PSIM insta
 
 1. **Plan**: turn the request into JSON with parts, values, coordinates and wires.
 2. **Layout check** (`check`): any error stops the run until it is fixed.
-3. **Generate**: AD writes SchDoc + PrjPcb; PSIM gets a build kit, or a native model on Windows.
-4. **Native check** (Windows): AD compiles and compares the pin-level netlist; PSIM solves and reads back waveforms.
-5. **Native export**: review text overlap, clipping and text over lines, then look at the drawing.
-6. **Delivery**: a customer folder plus a process archive.
+3. **Offline forecast** (`preflight`): Windows-look preview, expected compile warnings, PSIM pre-simulation; go to Windows when `ready_for_windows` is true.
+4. **Generate**: AD writes SchDoc + PrjPcb; PSIM gets a build kit, or a native model on Windows.
+5. **Native check** (Windows): AD compiles and compares the pin-level netlist; PSIM solves and reads back waveforms.
+6. **Native export**: review text overlap, clipping and text over lines, then look at the drawing.
+7. **Delivery**: a customer folder plus a process archive.
 
 Every step prints JSON, so the model reads and fixes findings one by one instead of judging "close enough" by itself.
 
@@ -51,7 +54,7 @@ Every step prints JSON, so the model reads and fixes findings one by one instead
 | For | You need |
 | --- | --- |
 | Checks, generation, editing, SVG render, build kit, delivery | Python 3.10+ (standard library only) on Windows, macOS or Linux |
-| PNG render | Optional resvg-py or Pillow: `python -m pip install -r requirements-optional.txt` |
+| PNG render | The Windows-look render needs Pillow plus Times New Roman/Arial (bundled with Windows and macOS) or the width-identical Liberation fonts (Linux: `fonts-liberation`); otherwise resvg-py or Pillow draw a smooth preview. Optional dependencies: `python -m pip install -r requirements-optional.txt` |
 | Windows native EMF to PNG, screenshot conversion | Python 3.11+ and Pillow 13 (included in the optional requirements above) |
 | Installing or running MCP via npx | Node.js 18+ |
 | AD compile and native export | Windows + licensed Altium Designer (validated with Enterprise 26.4.1) |
@@ -59,7 +62,7 @@ Every step prints JSON, so the model reads and fixes findings one by one instead
 
 Other software versions have not been validated and are not covered.
 
-Optional requirements depend on the Python version: 3.10 gets resvg-py only (portable PNG); 3.11+ also gets Pillow 13 (native EMF to PNG on Windows), so no older Pillow with known vulnerabilities is pulled in. resvg-py needs no separate Cairo; once installed, `render` uses it automatically. Choose a backend with `--renderer resvg` or `--renderer pillow`, and pin fonts with `--font-file`, `--font-dir` and `--no-system-fonts`. See [preview backends](docs/preview-backends.md) for the comparison and font notes.
+Optional requirements depend on the Python version: 3.10 gets resvg-py only (smooth previews, no Windows-look render); 3.11+ also gets Pillow 13 (Windows-look render, native EMF to PNG on Windows), so no older Pillow with known vulnerabilities is pulled in. `render` uses the Windows-look renderer by default (`--renderer gdi`); choose `--renderer resvg` or `--renderer pillow` explicitly, and point to font files with `--font-file` and `--font-dir`. See [preview backends](docs/preview-backends.md) for the comparison and font notes.
 
 ## Works on Windows, macOS and Linux
 
@@ -67,13 +70,22 @@ AD and PSIM run only on Windows. Everything that does not need the software is p
 
 | Task | Windows | macOS / Linux |
 | --- | --- | --- |
-| Plan, layout check, portable render, plan editing | ✓ | ✓ |
+| Plan, layout check, plan editing | ✓ | ✓ |
+| Windows-look preview, offline forecast (`preflight`), PSIM pre-simulation | ✓ | ✓ |
 | AD: write SchDoc + PrjPcb | ✓ | ✓ (identical to files written on Windows) |
 | PSIM: build kit | ✓ | ✓ (copy to a Windows PC with PSIM and double-click `build.bat`) |
 | AD compile/export, PSIM create/solve, window screenshots | ✓ (with the software) | Hand over to a Windows PC with the software |
 | Waveform measurement, delivery | ✓ | ✓ |
 
 Mac/Linux does not need AD or PSIM: AD files can be written there directly and are compiled and exported on Windows before delivery; PSIM models and results always come from PSIM on Windows. See [Prepare on Mac/Linux, run on Windows](#prepare-on-maclinux-run-on-windows) under Usage.
+
+### How the result matches what Windows shows
+
+- **The same file**: an AD SchDoc is byte-identical whichever OS writes it.
+- **The same drawing**: the Windows-look renderer is calibrated pixel by pixel against native exports: pixel scale, line widths, rounding, ClearType-style colored text edges, and PSIM's text placement rule (text start = horizontal centre of AREA - FormatFactor).
+- **The same text widths**: macOS ships Times New Roman and Arial; Linux uses the Liberation fonts, whose glyph widths match exactly, so text positions and line breaks are the same as on Windows and only stroke details differ. `env` shows which fonts are in use.
+- **Know the result in advance**: `preflight` predicts the compile warnings AD will report (four missing footprints for the RC example, as measured on Windows); linear PSIM circuits are pre-simulated with the same method class as PSIM (nodal analysis, fixed-step trapezoidal), within about 0.00003 V of the analytic RC solution.
+- **Automatic reconciliation**: after a handoff job runs on Windows, the returned manifest records whether the predicted warning count matched and the point-by-point deviation between the pre-simulation and PSIM's waveforms.
 
 ## Install
 
@@ -155,6 +167,11 @@ python $AD/scripts/native_ad.py render work/ad/RC_Filter.SchDoc work/ad/view.png
 PSIM=skills/psim-simulation-layout
 python $PSIM/scripts/native_psim.py check   $PSIM/assets/rc-filter-plan.json
 python $PSIM/scripts/native_psim.py package $PSIM/assets/rc-filter-plan.json work/psim-kit
+
+# Before Windows: offline forecast (Windows-look preview, expected compile warnings, PSIM pre-simulation)
+python $AD/scripts/native_ad.py preflight $AD/assets/rc-filter-plan.json work/preflight-ad
+python $PSIM/scripts/native_psim.py preflight $PSIM/assets/rc-filter-plan.json work/preflight-psim
+python $PSIM/scripts/native_psim.py presim $PSIM/assets/rc-filter-plan.json work/presim.csv
 ```
 
 All commands: [AD commands](skills/ad-schematic-layout/references/commands.md), [PSIM commands](skills/psim-simulation-layout/references/commands.md).
@@ -179,6 +196,8 @@ python $PSIM/scripts/native_psim.py receive work/job-psim work/returned-psim wor
 
 Reception checks the request, the plan and the SHA-256 of every file, and rejects mismatched plans, failed native checks and modified files. PNG, SMV and CSV are copied unchanged, never redrawn or recalculated. Add dependencies such as parameter files with `--include params.txt` when preparing the job.
 
+The job folder also carries the offline forecast in `preflight/`. After the Windows run, the `forecast` entry of the returned manifest compares prediction and reality (AD: predicted vs actual compile warnings; PSIM: largest deviation between the pre-simulation and PSIM's waveforms).
+
 | Picture | What it shows |
 | --- | --- |
 | `preview.render.png/svg` in the job folder | Offline approximation for checking the layout; fonts and uncalibrated parts may differ from the native software |
@@ -195,7 +214,7 @@ By default every column is compared with zero tolerance, without interpolation o
 
 ### MCP
 
-The MCP server uses only the Python standard library and exposes 29 tools to read, edit, check and render drawings, prepare jobs for Windows, receive native results and compare files or waveforms.
+The MCP server uses only the Python standard library and exposes 32 tools to read, edit, check and render drawings, forecast results before Windows, prepare jobs for Windows, receive native results and compare files or waveforms.
 
 ```bash
 claude mcp add ad-psim -- npx -y github:1837620622/ad-and-psim-skill mcp    # Claude Code
@@ -222,12 +241,13 @@ args = ["-y", "github:1837620622/ad-and-psim-skill", "mcp"]
 Without Node, use `python` as the command with `["<repo>/skills/ad-schematic-layout/scripts/mcp_server.py", "--with", "<repo>/skills/psim-simulation-layout/scripts"]` as arguments.
 
 <details>
-<summary>All 29 tools</summary>
+<summary>All 32 tools</summary>
 
 | Purpose | AD | PSIM |
 | --- | --- | --- |
 | Environment | `ad_env` | `psim_env` |
 | Layout check | `ad_check` | `psim_check` |
+| Forecast before Windows | `ad_preflight` | `psim_preflight`, `psim_presim` |
 | Read and edit | `ad_import`, `ad_edit` | `psim_plan_edit`, `psim_inspect`, `psim_edit` |
 | Generate | `ad_create` | `psim_package`, `psim_create` |
 | Preview and screenshot | `ad_render`, `ad_screenshot` | `psim_render`, `psim_screenshot` |
@@ -245,7 +265,7 @@ Without Node, use `python` as the command with `["<repo>/skills/ad-schematic-lay
 
 "Looks good" is written down as numbers and decided by code, not by the model's taste:
 
-1. **Plan check**: grid, connections, text spacing, proportions, density and value notation. Files are written only with 0 errors.
+1. **Plan check**: grid, connections, text spacing, proportions, density and value notation. Files are written only with 0 errors. Overlapping text is an error; when designators or values overlap text or lines, the `place_text` edit operation moves them to a collision-free spot.
 2. **Native connectivity** (AD) or **native solve** (PSIM).
 3. **Native drawing**: text overlap, clipping and text crossed by lines on the native EMF, then a visual review.
 
@@ -279,9 +299,9 @@ Yes for plans, checks, AD file generation, PSIM build kits or handoff jobs, prev
 
 No. The generator writes the same bytes on every OS; the tests pin the SHA-256 of the example file.
 
-**Why does PSIM need a build kit?**
+**Can a Mac produce a psimsch that opens with a double-click?**
 
-A psimsch is a proprietary binary format. The target Windows PSIM installation creates, solves and verifies the model. A build kit has the plan, tools and `build.bat`; cross-OS jobs use `handoff` and `run.bat` and also produce a verifiable return manifest. File compatibility and the actual solver version are recorded separately.
+No. psimsch is PSIM's closed format; even commercial tools such as Typhoon HIL and SIMBA need PSIM to export a netlist first. On Mac/Linux this package builds a kit instead: double-click `build.bat` on a Windows PC with PSIM and PSIM writes the psimsch, solves it, exports the drawing and finally opens the model. AD is different: SchDoc and PrjPcb are written directly on any OS and open in AD with a double-click on Windows (or `native_ad.py open`). Cross-OS jobs use `handoff` and `run.bat` with a verifiable return manifest.
 
 **Skills or MCP?**
 
@@ -295,9 +315,17 @@ It depends on whether the host lets the model read files, run commands and view 
 
 No. Import only reads the original drawing and edits go to a file you name; native PSIM parameter edits save a copy; delivery only copies files.
 
-**Can I send the portable render to a customer?**
+**Can I send the Windows-look render to a customer?**
 
-Better not. It is an approximation for debugging; send native exports or real screenshots.
+Better not. It is very close to the native export but is still a prediction; send the Windows native export or the original returned by `receive`.
+
+**Why does text on Linux look slightly different from Windows?**
+
+Linux uses the Liberation fonts by default. Their glyph widths equal Times New Roman and Arial, so positions, line breaks and collisions are the same; only stroke details differ. If you have licensed Times New Roman and Arial files, pass them with `--font-file`.
+
+**Can the pre-simulation replace PSIM?**
+
+No. It supports linear elements only (R, L, C, DC and sine sources, voltage probes) to confirm values, topology and waveform magnitudes before Windows, and refuses switches, diodes and controls. Delivered waveforms must come from PSIM.
 
 ## Layout of the repository
 
@@ -316,7 +344,7 @@ Each skill directory is self-contained and works when copied into any agent's sk
 
 ## Validation
 
-- The portable parts (checks, generation, import/editing, rendering, handoff/reception, comparison, MCP and installers) have automated tests. The CI matrix is configured for Windows, macOS and Linux with Python 3.10/3.13: `python -m unittest discover -s tests -v`. See Actions and the validation record for actual runs.
+- The portable parts (checks, generation, import/editing, rendering, handoff/reception, comparison, offline forecast and pre-simulation, MCP and installers) have automated tests; the Windows-look renderer is compared pixel by pixel with the native exports in the repository. The CI matrix is configured for Windows, macOS and Linux with Python 3.10/3.13: `python -m unittest discover -s tests -v`. See Actions and the validation record for actual runs.
 - The native parts were validated with AD Enterprise 26.4.1 and PSIM 2026.0.0.7209; records, limits and pending re-checks are in [docs/VALIDATION.md](docs/VALIDATION.md).
 - Codex skill discovery was checked in practice; other hosts use the directories from their official documentation and were not each run through a full design task.
 

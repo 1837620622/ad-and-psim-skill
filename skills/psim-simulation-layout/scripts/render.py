@@ -9,11 +9,24 @@ import json
 import math
 from pathlib import Path
 
-from canvas import open_canvas
-from psim_plan import CLOCK_RADIUS, display_text, kind, origin, ports, rotate, symbol_box, wire_points
+from canvas import open_canvas, pick_renderer
+from psim_plan import (
+    CLOCK_RADIUS,
+    display_text,
+    kind,
+    origin,
+    ports,
+    rotate,
+    symbol_box,
+    text_origin,
+    wire_points,
+)
 
 ELEMENT, WIRE, TEXT, DOT = '#0000ff', '#ff0000', '#000000', '#000000'
 STROKE = 0.5
+NATIVE_MARGIN_PX = 30
+# 仿原生（gdi）默认比例与像素对齐：与 PSIM 2026 参考导出（dpi 120）逐像素比对标定，见 docs/VALIDATION.md。
+NATIVE_LOOK = {'scale': 1.555, 'offset': (0.5, 0.125)}
 
 
 def _bounds(plan):
@@ -52,10 +65,10 @@ def _symbol(canvas, element, shift):
         canvas.ellipse(x, y, r, r, ELEMENT, STROKE, fill)
 
     if t == 'R':
-        line((0, 0), (9, 0))
-        step = 32 / 6
-        line(*[(9, 0)] + [(9 + step * (k + 0.5), -6 if k % 2 == 0 else 6) for k in range(6)] + [(41, 0)])
-        line((41, 0), (50, 0))
+        # 锯齿：周期 10、振幅约 5.75，从 10.75 到 40.75（与原生导出逐像素比对标定）。
+        line((0, 0), (10.75, 0))
+        line(*[(10.75, 0)] + [(13.25 + 5 * k, -5.75 if k % 2 == 0 else 5.75) for k in range(6)] + [(40.75, 0)])
+        line((40.75, 0), (50, 0))
     elif t == 'L':
         line((0, 0), (10, 0))
         for k in range(4):
@@ -102,11 +115,13 @@ def _symbol(canvas, element, shift):
         circle(5, -6, 0.8)
 
 
-def render_plan(plan, target, scale=4.0, margin=20, **canvas_options):
-    """渲染为 .svg 或 .png（PNG 可选 resvg-py 或 Pillow）；返回输出信息。"""
+def render_plan(plan, target, scale=None, margin=20, **canvas_options):
+    """渲染为 .svg 或 .png；PNG 默认仿原生（gdi，需要 Pillow），否则用 resvg-py 或 Pillow。"""
+    scale, canvas_options = pick_renderer(target, scale, canvas_options, NATIVE_LOOK)
     x1, y1, x2, y2 = _bounds(plan)
-    shift = (x1 - margin, y1 - margin)
-    width, height = x2 - x1 + 2 * margin, y2 - y1 + 2 * margin
+    # 平移量取整到像素：计划坐标到像素的小数部分与取景无关，栅格对齐只取决于坐标本身（和原生一致）。
+    shift = tuple(math.floor((v - margin) * scale) / scale for v in (x1, y1))
+    width, height = x2 + margin - shift[0], y2 + margin - shift[1]
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     canvas = open_canvas(target, width, height, scale, '#ffffff', y_up=False, **canvas_options)
@@ -134,16 +149,11 @@ def render_plan(plan, target, scale=4.0, margin=20, **canvas_options):
             canvas.ellipse(p[0] - shift[0], p[1] - shift[1], 1.5, 1.5, DOT, 0.3, DOT)
     for element in plan['elements']:
         for label in element.get('textlinks', []):
-            ax, ay = label['AREA'][:2]
-            size = abs(float(label.get('FontSize', -15)))
-            canvas.text(
-                ax + 1.5 - shift[0],
-                ay + 0.79 * size - shift[1],
-                display_text(element, label['FieldName']),
-                0.8 * size,
-                TEXT,
-                'sans',
-            )
+            x, baseline, em = text_origin(label)
+            canvas.text(x - shift[0], baseline - shift[1], display_text(element, label['FieldName']), em, TEXT, 'sans')
+    if canvas.renderer == 'gdi':
+        # PSIM 原生导出以墨迹范围为准，四周各留 30 像素。
+        canvas.crop_to_ink(NATIVE_MARGIN_PX)
     canvas.save(target, '#ffffff')
     return {
         'render': str(target.resolve()),
@@ -156,7 +166,7 @@ def render_plan(plan, target, scale=4.0, margin=20, **canvas_options):
     }
 
 
-def render_file(source, target, scale=4.0, **canvas_options):
+def render_file(source, target, scale=None, **canvas_options):
     source = Path(source)
     if source.suffix.lower() != '.json':
         raise ValueError('便携渲染读取建模计划 JSON；psimsch 是 PSIM 私有二进制格式，需在 Windows 上原生导出')

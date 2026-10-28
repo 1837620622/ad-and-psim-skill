@@ -9,9 +9,12 @@
 | `env` | 报告系统、Python、Pillow，以及是否找到 PSIM | 任何 |
 | `check PLAN [--strict]` | 排版预检 | 任何 |
 | `plan-edit PLAN OPS OUT` | 按操作清单修改计划并预检 | 任何 |
-| `render PLAN OUT [--scale N]` | 计划渲染为 PNG/SVG，样式接近 PSIM 原生导出 | 任何 |
+| `preflight PLAN DIR` | 离线预测：排版预检（按原生规则估算文字位置）、仿原生预览、线性电路离线预仿真；`ready_for_windows` 为 false 时返回 1 | 任何 |
+| `presim PLAN OUT.csv` | 离线预仿真 R、L、C、VDC、VSIN、VP 组成的线性电路（节点分析 + 固定步长梯形积分，零初始状态），另报步长和时长检查；其他元件直接拒绝 | 任何 |
+| `render PLAN OUT [--scale N] [--renderer R]` | 计划渲染为 PNG/SVG；PNG 默认仿 Windows 原生出图 | 任何 |
 | `package PLAN DIR [--name N]` | 生成 Windows 构建包 | 任何 |
 | `screenshot SOURCE OUT` | 有 PSIM 且给的是 psimsch：打开软件截窗口；否则渲染计划 | 任何 |
+| `open PSIMSCH` | 用 PSIM 打开模型（不等待窗口关闭）；构建包最后会自动调用 | Windows + PSIM |
 | `deliver WORK OUT [--name N] [--include 通配符]` | 生成客户目录与归档目录 | 任何 |
 | `handoff PLAN DIR [--name N] [--include 文件]` | 准备可校验的 Windows 原生执行任务 | 任何 |
 | `receive JOB RETURNED OUT` | 校验接收原生 PNG、SMV/CSV 和模型 | 任何 |
@@ -73,6 +76,7 @@ PSIM 安装目录按顺序查找：`--psim-dir`、环境变量 `PSIM_DIR`、Wind
 | `add_element` / `remove_element` | `element` / `name` | |
 | `add_wire` / `remove_wire` | `from`、`to` / `at` | `remove_wire` 删除端点在该点的导线 |
 | `shift_all` | `dx`、`dy` | 整体平移 |
+| `place_text` | 可选 `names` | 自动摆放关联文字：横放元件放上方或下方，竖放元件放右侧或左侧，探头名放探头旁；按原生定位规则（起点 = AREA 水平中心 - FormatFactor）计算 AREA，取第一个不压字、不压符号、不压线的位置；没有文字问题时不改动 |
 
 移动元件时保留共用节点上的探头和其他端口；移动前后比较已知端口的同网伙伴，发生意外断接或短接时拒绝保存。未标定器件只知道首端口，仍需原生核验。
 
@@ -86,10 +90,10 @@ kit/
 ├── plan.json
 ├── tools/               # 自包含的 Python 执行工具
 ├── README.txt
-└── preview.render.png   # 便携渲染预览（有 resvg-py 或 Pillow 时）
+└── preview.render.png   # 仿原生预览（有 Pillow 时；否则 resvg-py 平滑渲染）
 ```
 
-在装有 PSIM、Python 3.11+ 和 Pillow 13 的 Windows 电脑上双击 `build.bat`，得到 `名称.psimsch`、`result\`（SMV、CSV）和 `drawing\`（EMF、PNG）。找不到 PSIM 时先设置 `PSIM_DIR`。
+在装有 PSIM、Python 3.11+ 和 Pillow 13 的 Windows 电脑上双击 `build.bat`，得到 `名称.psimsch`、`result\`（SMV、CSV）和 `drawing\`（EMF、PNG），最后自动用 PSIM 打开模型（设置 `PSIM_NO_OPEN` 跳过）。找不到 PSIM 时先设置 `PSIM_DIR`。psimsch 是 PSIM 的私有格式，第三方工具也要靠 PSIM 导出网表才能读，所以只能在 Windows 上由 PSIM 自己写出。
 
 名称支持中文，批处理使用 UTF-8。原生文字检查失败时整个构建返回失败。需要回传校验、与准备端一致的原生预览及请求对应关系时，改用 [handoff / receive](handoff.md)。
 
@@ -99,9 +103,9 @@ kit/
 
 ## 截图
 
-`render` 的 PNG 后端可用 `--renderer auto|resvg|pillow` 选择。安装 `resvg-py==0.5.0` 后自动优先采用 resvg；可重复传 `--font-file` / `--font-dir`，并用 `--no-system-fonts` 限定字体来源。JSON 记录后端和显式字体文件哈希。字体选项仅用于 resvg PNG；SVG 的字体由查看器加载。该后端不求解电路；与实际 PSIM 图面一致的结果应接收 Windows 原生 PNG。
+`render` 的 PNG 后端用 `--renderer auto|gdi|resvg|pillow` 选择。`auto` 在有 Pillow 和 Arial（或同度量的 Liberation Sans）时用 `gdi`：按 PSIM 原生导出（dpi 120）标定的像素比例 1.555 像素/单位、四周 30 像素留白、1 像素线条，文字起点按 AREA 水平中心 - FormatFactor、字号 6/7·|FontSize|，RC 示例与原生导出尺寸相同、线条和文字像素 97.1% 在 1 像素内对齐；没有时退回 resvg 或 Pillow 平滑渲染。未标定的元件画成带类型名的方框。`--font-file` / `--font-dir` 可指定字体文件；`--no-system-fonts` 只用于 resvg。渲染不求解电路；与实际 PSIM 图面一致的最终结果仍应接收 Windows 原生 PNG。
 
-`screenshot` 在 Windows 找到 PSIM 且输入是 psimsch 时：启动 PSIM 打开模型，等窗口标题出现模型名，最大化后截取整个窗口。其他情况按计划 JSON 便携渲染，结果里 `source` 为 `portable_render`。截已打开的窗口：`python scripts/capture.py "PSIM" shot.png`。
+`screenshot` 在 Windows 找到 PSIM 且输入是 psimsch 时：启动 PSIM 打开模型，等窗口标题出现模型名，最大化后截取整个窗口。其他情况按计划 JSON 仿原生渲染，结果里 `source` 为 `portable_render`。截已打开的窗口：`python scripts/capture.py "PSIM" shot.png`。
 
 ## MCP
 
@@ -113,4 +117,4 @@ python scripts/mcp_server.py --with ../../ad-schematic-layout/scripts   # 同时
 npx -y github:1837620622/ad-and-psim-skill mcp       # 不用克隆仓库，需要 Node 18+
 ```
 
-工具：`psim_env`、`psim_check`、`psim_plan_edit`、`psim_render`、`psim_package`、`psim_screenshot`、`psim_create`、`psim_inspect`、`psim_edit`、`psim_simulate`、`psim_export`、`psim_measure`、`psim_deliver`、`psim_handoff`、`psim_receive`、`psim_compare`。计划、操作清单和修改清单参数既可以是文件路径，也可以直接写 JSON 文本；渲染和截图结果会附带图片。各客户端的配置写法见仓库 README。
+工具：`psim_env`、`psim_check`、`psim_preflight`、`psim_presim`、`psim_plan_edit`、`psim_render`、`psim_package`、`psim_screenshot`、`psim_create`、`psim_inspect`、`psim_edit`、`psim_simulate`、`psim_export`、`psim_measure`、`psim_deliver`、`psim_handoff`、`psim_receive`、`psim_compare`。计划、操作清单和修改清单参数既可以是文件路径，也可以直接写 JSON 文本；渲染和截图结果会附带图片。各客户端的配置写法见仓库 README。

@@ -18,6 +18,9 @@ RESULTS = {'.smv', '.ssf', '.csv'}
 DRAWINGS = {'.pdf', '.png', '.svg', '.emf', '.jpg', '.jpeg'}
 # 调试草图与软件自动生成的缓存不交付。
 DRAFT_MARKS = ('draft', '.render', 'preview')
+# 离线预测与预仿真是过程文件（不是原生求解结果），一律归档。
+PROCESS_DIRS = {'preflight'}
+PROCESS_MARKS = ('presim',)
 SKIP_DIRS = {'.git', '__pycache__', '__previews', 'history', '.vscode', '.idea'}
 SKIP_FILES = (
     '*.pyc',
@@ -38,6 +41,8 @@ def classify(path, include=()):
         return 'skip'
     if any(fnmatch.fnmatch(path.as_posix(), pattern) or fnmatch.fnmatch(path.name, pattern) for pattern in include):
         return 'deliver'
+    if any(part.lower() in PROCESS_DIRS for part in path.parts[:-1]) or any(m in name for m in PROCESS_MARKS):
+        return 'archive'
     suffix = path.suffix.lower()
     if suffix in PROJECT or suffix in RESULTS:
         return 'deliver'

@@ -4,16 +4,31 @@ SYMBOLS 中的几何按 PSIM 2026 原生导出标定（DIRECTION=0，相对首�
 """
 
 import copy
+import math
 from collections import defaultdict
 import re
 
+# box 是整体外框；parts 把引线和图形主体分开（圆形写作 ('circle', 圆心 x, 圆心 y, 半径)），
+# 判断文字压符号时用，避免把引线两侧和圆外的空白算作符号。
 SYMBOLS = {
-    'R': {'ports': [(0, 0), (50, 0)], 'box': (0, -7, 50, 7)},
-    'C': {'ports': [(0, 0), (50, 0)], 'box': (0, -8, 50, 8)},
+    'R': {
+        'ports': [(0, 0), (50, 0)],
+        'box': (0, -7, 50, 7),
+        'parts': [(0, -1, 10, 1), (10, -7, 41, 7), (41, -1, 50, 1)],
+    },
+    'C': {
+        'ports': [(0, 0), (50, 0)],
+        'box': (0, -8, 50, 8),
+        'parts': [(0, -1, 23, 1), (22, -8, 28, 8), (27, -1, 50, 1)],
+    },
     'L': {'ports': [(0, 0), (50, 0)], 'box': (0, -8, 50, 2), 'calibrated': False},
-    'VDC': {'ports': [(0, 0), (0, 50)], 'box': (-11, 0, 11, 50)},
+    'VDC': {
+        'ports': [(0, 0), (0, 50)],
+        'box': (-11, 0, 11, 50),
+        'parts': [(-1, 0, 1, 15), ('circle', 0, 25, 10.5), (-1, 35, 1, 50)],
+    },
     'VSIN': {'ports': [(0, 0), (0, 50)], 'box': (-11, 0, 11, 50), 'calibrated': False},
-    'VP': {'ports': [(0, 0)], 'box': (-11, -31, 11, 0)},
+    'VP': {'ports': [(0, 0)], 'box': (-11, -31, 11, 0), 'parts': [(-1, -10, 1, 0), ('circle', 0, -20, 10.5)]},
     'GROUND': {'ports': [(0, 0)], 'box': (-7, 0, 7, 17)},
 }
 CLOCK_RADIUS = 20
@@ -72,6 +87,34 @@ def ports(element):
     direction = element.get('attributes', {}).get('DIRECTION', 0)
     offsets = symbol['ports'] if symbol else [(0, 0)]
     return [(start[0] + du, start[1] + dv) for du, dv in (rotate(o, direction) for o in offsets)]
+
+
+def symbol_parts(element):
+    """符号的分块范围（引线与主体分开）；没有分块数据时退回整体外框。"""
+    start = origin(element)
+    symbol = SYMBOLS.get(kind(element))
+    if start is None or symbol is None or 'parts' not in symbol:
+        box = symbol_box(element)
+        return [box] if box else []
+    direction = element.get('attributes', {}).get('DIRECTION', 0)
+    result = []
+    for part in symbol['parts']:
+        if part[0] == 'circle':
+            du, dv = rotate(part[1:3], direction)
+            result.append(('circle', start[0] + du, start[1] + dv, part[3]))
+        else:
+            result.append(place(part, start, direction))
+    return result
+
+
+def part_overlaps(part, box, inset=0.0):
+    """符号分块与矩形是否重叠；圆形按到圆心的最近距离判断。"""
+    if part[0] == 'circle':
+        _, cx, cy, r = part
+        dx = max(box[0] - cx, 0, cx - box[2])
+        dy = max(box[1] - cy, 0, cy - box[3])
+        return dx * dx + dy * dy < (r - inset) ** 2
+    return min(part[2], box[2]) - max(part[0], box[0]) > inset and min(part[3], box[3]) - max(part[1], box[1]) > inset
 
 
 def symbol_box(element):
@@ -168,6 +211,41 @@ def square(a, b, obstacles=()):
         (c for c in options if not any(crosses(seg, box) for seg in ((a, c), (c, b)) for box in obstacles)), options[0]
     )
     return [make_wire(a, corner), make_wire(corner, b)]
+
+
+# 关联文字的原生位置（按 PSIM 2026 原生导出标定）：起点 = AREA 水平中心 - FormatFactor，
+# 基线 = AREA 上边 + TEXT_BASELINE·|FontSize|，字号 em = TEXT_EM·|FontSize|。
+FORMAT_FACTOR = 18.325623
+TEXT_EM = 6 / 7
+TEXT_BASELINE = 0.76
+
+
+# Arial（与 Liberation Sans 度量相同）ASCII 32..126 的字宽，单位 1/1000 em。
+ARIAL = (
+    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556,
+    556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778,
+    722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278,
+    278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
+    556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+)  # fmt: skip
+DESCENDERS = set('gjpqy(),;_[]{}|')
+
+
+def text_box(element, label):
+    """关联文字在原生图上的大致墨迹框 (x1, y1, x2, y2)：按原生定位规则和 Arial 字宽估算。"""
+    x, baseline, em = text_origin(label)
+    value = display_text(element, label.get('FieldName', ''))
+    width = sum(ARIAL[ord(c) - 32] if 32 <= ord(c) < 127 else 1000 for c in value) / 1000 * em
+    low = 0.21 * em if DESCENDERS & set(value) or any(ord(c) > 0x2E80 for c in value) else 0
+    return (x, baseline - 0.72 * em, x + width, baseline + low)
+
+
+def text_origin(label):
+    """返回关联文字的 (起点 x, 基线 y, em)，单位与计划坐标相同。"""
+    x1, y1, x2, _ = (float(v) for v in label['AREA'])
+    size = abs(float(label.get('FontSize', -15)))
+    factor = float(label.get('FormatFactor', FORMAT_FACTOR))
+    return (x1 + x2) / 2 - factor, y1 + TEXT_BASELINE * size, TEXT_EM * size
 
 
 def display_text(element, field):
@@ -270,6 +348,102 @@ def apply_edits(plan, operations):
                     element.update(make_wire((a[0] + dx, a[1] + dy), (b[0] + dx, b[1] + dy)))
                 else:
                     _shift_element(element, dx, dy)
+        elif action == 'place_text':
+            plan = place_text(plan, op.get('names'))
+            elements = plan['elements']
         else:
             raise ValueError(f'未知编辑操作：{action!r}')
+    return plan
+
+
+TEXT_CODES = ('TEXT_OVERLAP', 'TEXT_ON_SYMBOL', 'TEXT_ON_WIRE')
+LINE = 17  # 一行关联文字的 AREA 高度（FontSize -15）
+
+
+def _text_problems(plan):
+    from check_layout import check_plan
+
+    return [f for f in check_plan(plan)['findings'] if f['code'] in TEXT_CODES]
+
+
+def _area(start, top, label, element):
+    """文字起点为 start 时的 AREA：中心 = 起点 + FormatFactor，宽度按文字长度留余量。"""
+    factor = float(label.get('FormatFactor', FORMAT_FACTOR))
+    x1, _, x2, _ = text_box(element, dict(label, AREA=[0, 0, 0, 0]))
+    width = max(24, math.ceil(x2 - x1) + 6)
+    center = start + factor
+    return [round(center - width / 2), round(top), round(center - width / 2) + width, round(top) + LINE]
+
+
+def _text_candidates(element):
+    """按排版规则给出候选：横放元件在上方或下方，竖放元件在右侧或左侧，探头名在探头右侧或左侧。"""
+    labels = element.get('textlinks', [])
+    box = symbol_box(element)
+    start = origin(element)
+    if not labels or start is None:
+        return []
+    if box is None:
+        box = (start[0] - 10, start[1] - 10, start[0] + 10, start[1] + 10)
+    x1, y1, x2, y2 = box
+    widths = []
+    for label in labels:
+        a, _, b, _ = text_box(element, dict(label, AREA=[0, 0, 0, 0]))
+        widths.append(b - a)
+    block = LINE * len(labels)
+    t = kind(element)
+    if t == 'VP':
+        cy = start[1] - 20
+        order = [((x2 + 2, cy - 8), (1, 0)), ((x1 - 3 - max(widths), cy - 8), (-1, 0))]
+    else:
+        middle = (y1 + y2) / 2
+        right = ((x2 + 3, middle - block / 2), (1, 0))
+        left = ((x1 - 4 - max(widths), middle - block / 2), (-1, 0))
+        above = ((x1 + 7, y1 - 4 - block), (0, -1))
+        below = ((x1 + 7, y2 + 1), (0, 1))
+        order = (right, left, above, below) if y2 - y1 > x2 - x1 else (above, below, right, left)
+    # 每个方位再向外多挪 5、10 个单位，拥挤处也能找到空位。
+    return [
+        [_area(x + ux * step, y + uy * step + LINE * i, label, element) for i, label in enumerate(labels)]
+        for step in (0, 5, 10)
+        for (x, y), (ux, uy) in order
+    ]
+
+
+def place_text(plan, names=None):
+    """自动摆放关联文字：对压字、压符号、压导线的元件逐个试候选位置，取问题最少的。
+
+    已经没有文字问题的计划原样返回；只动 names 指定的元件（默认全部有关元件）。
+    """
+    plan = copy.deepcopy(plan)
+    problems = _text_problems(plan)
+    if not problems:
+        return plan
+    wanted = set(names) if names else None
+    for _ in range(2):
+        spots = [tuple(f['at'][:2]) for f in problems if 'at' in f]
+        for element in plan['elements']:
+            labels = element.get('textlinks', [])
+            if not labels or (wanted is not None and element.get('name') not in wanted):
+                continue
+            boxes = [text_box(element, label) for label in labels]
+            if not any(abs(b[0] - x) < 30 and abs(b[1] - y) < 30 for b in boxes for x, y in spots):
+                continue
+            best = (len(problems), None)
+            for areas in _text_candidates(element):
+                saved = [label['AREA'] for label in labels]
+                for label, area in zip(labels, areas):
+                    label['AREA'] = area
+                count = len(_text_problems(plan))
+                for label, area in zip(labels, saved):
+                    label['AREA'] = area
+                if count < best[0]:
+                    best = (count, areas)
+                if count == 0:
+                    break
+            if best[1] is not None:
+                for label, area in zip(labels, best[1]):
+                    label['AREA'] = area
+                problems = _text_problems(plan)
+            if not problems:
+                return plan
     return plan

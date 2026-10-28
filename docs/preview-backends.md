@@ -1,10 +1,33 @@
 # Mac 预览后端 / Mac preview backends
 
+## 默认：仿原生后端 gdi / Default: Windows-look backend
+
+`render` 的 PNG 默认用本项目的 `gdi` 后端（需要 Pillow 和 Times New Roman/Arial 或同度量的 Liberation 字体）。它不是通用绘图库，而是按仓库里的 Windows 原生导出（[AD](images/ad-native-rc.png)、[PSIM](images/psim-native-rc.png)）逐像素标定的：
+
+| 项目 | AD | PSIM |
+| --- | --- | --- |
+| 像素比例 | 横向 2.161、纵向 2.1576 像素/单位（参考导出环境） | 1.555 像素/单位（导出 dpi 120） |
+| 取景 | 整张图纸 | 墨迹范围外加四周 30 像素 |
+| 线条 | 不抗锯齿；笔宽 = 线宽 × 比例取整，以坐标为中心 | 1 像素，不抗锯齿 |
+| 文字 | 三倍水平分辨率绘制，1-2-3-2-1 子像素滤波，模拟 ClearType 彩边 | 同左；起点 = AREA 水平中心 - FormatFactor，字号 6/7·\|FontSize\| |
+| 字体 | Times New Roman；没有时用字宽相同的 Liberation Serif | Arial；没有时用 Liberation Sans |
+
+和参考原生导出对比（RC 示例，Linux + Liberation 字体）：
+
+| | 图像尺寸 | 线条和文字像素在 1 像素内对齐 | 线条和文字像素颜色一致 |
+| --- | --- | --- | --- |
+| AD：原平滑渲染 → gdi | 不同 → 相同 | 96.7% → 97.8% | 46.0% → 73.7% |
+| PSIM：原平滑渲染 → gdi | 不同 → 相同 | 57.2% → 97.1% | 0.9% → 30.9% |
+
+只统计线条和文字像素（任一张图在该处有墨迹），不把白底算进一致率。颜色不一致的主要是文字抗锯齿：Windows 的 TrueType 微调和 ClearType 无法逐像素复现。原生导出的像素比例取决于导出机器的设置，换一台电脑导出时可用 `--scale` 对齐；未标定的 PSIM 元件仍画成方框。
+
+The default `gdi` backend is calibrated against the native exports in the repository: same image size, and for line and text pixels (white background excluded) 97.8% (AD) and 97.1% (PSIM) align within one pixel. Text anti-aliasing is the main remaining difference.
+
 ## 选择依据 / Choice
 
 | 包 / Package | 作用与平台 / Scope and platforms | 本项目处理 / Integration |
 | --- | --- | --- |
-| [resvg-py](https://pypi.org/project/resvg-py/) | SVG → PNG；Python 3.10+；macOS Intel、Apple Silicon；MIT | 已加入可选依赖并实测，安装后自动用于便携 PNG；不解析 SchDoc/psimsch，不求解电路 |
+| [resvg-py](https://pypi.org/project/resvg-py/) | SVG → PNG；Python 3.10+；macOS Intel、Apple Silicon；MIT | 已加入可选依赖并实测；没有 Pillow 或字体时作为平滑渲染后备，也可用 `--renderer resvg` 指定；不解析 SchDoc/psimsch，不求解电路 |
 | [altium-monkey](https://pypi.org/project/altium-monkey/) | 专用 Altium 解析与预览；`native_altium()` 样式；Python 3.12–3.14；AGPL-3.0-or-later | 已隔离评测，未并入商业项目依赖；当前完整依赖支持 Apple Silicon Mac，Intel Mac 受 [wn-geometer](https://pypi.org/project/wn-geometer/) 的平台轮子限制 |
 | [skia-python](https://pypi.org/project/skia-python/) | 通用绘图引擎，有 macOS 两架构轮子 | 不提供原生 AD/PSIM 的符号、字体规则或求解器，仅更换画笔不能保证原图一致 |
 | [CairoSVG](https://cairosvg.org/documentation/) | SVG → PNG/PDF，另需 Cairo 环境 | 本项目没有采用；同样不解析这两种原生工程 |

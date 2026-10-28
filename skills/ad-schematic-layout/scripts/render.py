@@ -6,13 +6,16 @@
 import math
 from pathlib import Path
 
-from canvas import color, open_canvas
+from canvas import color, open_canvas, pick_renderer
 from schdoc import pin_end, point
 
 # 原生导出标定：字号每 pt 约 0.85 个 10 mil 单位的 em，基线比锚点高约 0.24 pt。
 EM_PER_PT = 0.85
 BASELINE_PER_PT = 0.24
+NUMBER_RISE_PER_PT = 0.19
 LINE_WIDTHS = {0: 0.4, 1: 1.0, 2: 2.0, 3: 4.0}
+# 仿原生（gdi）默认比例与像素对齐：与 AD 26.4.1 参考导出逐像素比对标定，见 docs/VALIDATION.md。
+NATIVE_LOOK = {'scale': (2.161, 2.1576), 'offset': (0.45, 0.45)}
 
 
 def _font(sheet, font_id):
@@ -171,14 +174,14 @@ def _pin(canvas, sheet, record):
             canvas.text(base[0] + 0.3 * size, base[1] + gap, clean, em, ink, family, rotation=1)
     number = record.get('DESIGNATOR', '')
     if flags & 16 and number.strip():
-        # 引脚号从器件边沿向外偏 9 个单位对齐，基线在引脚线上方。
+        # 引脚号从器件边沿向外偏 9 个单位对齐，基线在引脚线上方约 0.19 倍字号（按原生导出像素标定）。
         dx, dy = ((1, 0), (0, 1), (-1, 0), (0, -1))[direction]
         nx, ny = base[0] + dx * 9, base[1] + dy * 9
         anchor = 'end' if direction in (2, 3) else 'start'
         if direction in (0, 2):
-            canvas.text(nx, ny + 1 + BASELINE_PER_PT * size, number, em, ink, family, anchor=anchor)
+            canvas.text(nx, ny + NUMBER_RISE_PER_PT * size, number, em, ink, family, anchor=anchor)
         else:
-            canvas.text(nx - 1 - BASELINE_PER_PT * size, ny, number, em, ink, family, rotation=1, anchor=anchor)
+            canvas.text(nx - NUMBER_RISE_PER_PT * size, ny, number, em, ink, family, rotation=1, anchor=anchor)
 
 
 def _auto_junctions(records):
@@ -204,8 +207,8 @@ def _auto_junctions(records):
     return {p for p in anchors if p not in stored and any(inside(p, s) for s in wires)}
 
 
-def render_records(records, target, scale=4.0, zones=True, **canvas_options):
-    """渲染为 .svg 或 .png（PNG 可选 resvg-py 或 Pillow）；返回输出信息。"""
+def render_records(records, target, scale=None, zones=True, **canvas_options):
+    """渲染为 .svg 或 .png；PNG 默认仿原生（gdi，需要 Pillow），否则用 resvg-py 或 Pillow。"""
     from plan_tools import sheet_size
 
     sheet = records[1]
@@ -213,6 +216,7 @@ def render_records(records, target, scale=4.0, zones=True, **canvas_options):
     background = color(sheet.get('AREACOLOR', 16777215))
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
+    scale, canvas_options = pick_renderer(target, scale, canvas_options, NATIVE_LOOK)
     canvas = open_canvas(target, width, height, scale, background, **canvas_options)
     if zones:
         _zones(canvas, sheet, width, height)
@@ -310,7 +314,7 @@ def render_records(records, target, scale=4.0, zones=True, **canvas_options):
     }
 
 
-def render_file(source, target, scale=4.0, **canvas_options):
+def render_file(source, target, scale=None, **canvas_options):
     """source 可为 SchDoc 或计划 JSON。"""
     import json
 

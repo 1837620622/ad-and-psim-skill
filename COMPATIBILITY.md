@@ -26,7 +26,7 @@ Codex 的技能发现实际验证过；其他宿主按官方文档的目录适�
 
 不支持技能目录、但支持 MCP 的客户端，用 MCP 服务器接入同样的功能：`npx -y github:1837620622/ad-and-psim-skill mcp`，或直接运行 `skills/ad-schematic-layout/scripts/mcp_server.py --with skills/psim-simulation-layout/scripts`。服务器支持 MCP 协议 2024-11-05 到 2025-11-25，工具参数只用基本 JSON 类型，方便各家模型调用。
 
-服务器提供 29 个工具，包括跨系统的任务准备、原生结果接收和一致性比较。原生调用仍在 Windows 执行；可在 Mac/Linux 上先准备任务目录，再离线传到 Windows 双击运行，不需要启动网络服务。
+服务器提供 32 个工具，包括上 Windows 前的离线预测、跨系统的任务准备、原生结果接收和一致性比较。原生调用仍在 Windows 执行；可在 Mac/Linux 上先准备任务目录，再离线传到 Windows 双击运行，不需要启动网络服务。
 
 ## 让不同模型给出一致的结果
 
@@ -56,6 +56,8 @@ Use the native software on Windows to verify, simulate and export; fix every tex
 ## 操作系统 / Operating systems
 
 预检、生成 AD 文件、导入修改、渲染、PSIM 构建包、波形测量和交付在 Windows、macOS、Linux 上都能运行。AD 原生脚本、PSIM 接口、原生出图和窗口截图需要 Windows 与已授权的软件；在其他系统上，把生成的 AD 文件或 PSIM 构建包交给有软件的 Windows 电脑即可。
+
+仿原生出图按 Windows 原生导出标定；macOS 自带 Times New Roman 和 Arial，Linux 用字宽相同的 Liberation 字体（`fonts-liberation`），`env` 会显示所用字体。psimsch 是 PSIM 的私有格式，只能在 Windows 上由 PSIM 写出；PSIM 构建包最后会自动打开模型。
 
 `handoff` / `receive` 让 Mac/Linux 不装软件也能完成整个流程：准备计划和便携预览，Windows 实际编译或求解，再接收原生 PNG 与原始结果。原生 PNG 按字节复制，因此不受 Mac/Linux 的本地字体替换影响；离线便携渲染仍是近似图。操作步骤见 [交接与比较](skills/ad-schematic-layout/references/handoff.md)。
 

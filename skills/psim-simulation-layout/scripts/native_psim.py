@@ -17,6 +17,7 @@ import platform
 import re
 import shutil
 import struct
+import subprocess
 import sys
 
 HERE = Path(__file__).resolve().parent
@@ -27,6 +28,7 @@ PACKAGE_TOOLS = (
     'review_emf_text.py',
     'native_job.py',
     'compare_results.py',
+    'presim.py',
     'render.py',
     'canvas.py',
     'capture.py',
@@ -126,6 +128,40 @@ def precheck(plan):
         details = '; '.join(f'{f["code"]}: {f["message"]}' for f in result['findings'] if f['severity'] == 'error')
         raise ValueError(f'排版预检有 error，未创建模型：{details[:600]}')
     return result
+
+
+def preflight(plan, folder):
+    """不装 PSIM 时预测原生结果：排版预检、仿原生预览和线性电路的离线预仿真，给出能否上 Windows 的结论。"""
+    from check_layout import check_plan
+    from presim import presimulate
+    from render import render_plan
+
+    validate(plan)
+    folder = Path(folder).resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    layout = check_plan(plan)
+    write_json(folder / 'layout-check.json', layout)
+    target = folder / 'preview.png'
+    try:
+        preview = render_plan(plan, target)
+    except (ImportError, RuntimeError):
+        preview = render_plan(plan, target.with_suffix('.svg'))
+    try:
+        simulation = presimulate(plan, folder / 'presim.csv')
+    except ValueError as error:
+        simulation = {'status': 'not_simulated', 'reason': str(error)}
+    blocking = [f'{f["code"]}: {f["message"]}' for f in layout['findings'] if f['severity'] in ('error', 'warning')]
+    blocking += [f'{f["code"]}: {f["message"]}' for f in simulation.get('findings', []) if f['severity'] == 'warning']
+    return {
+        'ready_for_windows': not blocking,
+        'blocking': blocking,
+        'layout_check': dict(layout['summary'], report=str(folder / 'layout-check.json')),
+        'presim': simulation,
+        'preview': preview['render'],
+        'preview_renderer': preview['renderer'],
+        'native_verified': False,
+        'note': '离线预测，不代替 PSIM 原生求解和出图；预览为仿原生渲染，预仿真只覆盖线性元件。',
+    }
 
 
 def validate(plan):
@@ -423,6 +459,9 @@ if defined PSIM_DIR set ARGS=--psim-dir "%PSIM_DIR%"
 %PY% tools\native_psim.py %ARGS% simulate "{name}.psimsch" result || goto :fail
 %PY% tools\native_psim.py %ARGS% export "{name}.psimsch" drawing\{name}.emf || goto :fail
 echo Done: {name}.psimsch, result\, drawing\
+rem Open the finished model in PSIM unless PSIM_NO_OPEN is set; failing to open does not fail the build.
+if defined PSIM_NO_OPEN exit /b 0
+%PY% tools\native_psim.py %ARGS% open "{name}.psimsch" >nul || echo Open {name}.psimsch in PSIM manually.
 exit /b 0
 :fail
 echo Build failed. Check the message above.
@@ -434,14 +473,16 @@ PACKAGE_README = """{name} - PSIM 构建包 / PSIM build kit
 在装有 PSIM 的 Windows 电脑上双击 build.bat，会依次：
 1. 由 PSIM 原生接口按 plan.json 写出 {name}.psimsch；
 2. 原生求解，结果写入 result\\（SMV 与 CSV）；
-3. 原生出图，写入 drawing\\（EMF、PNG）。
+3. 原生出图，写入 drawing\\（EMF、PNG）；
+4. 用 PSIM 打开做好的 {name}.psimsch（设置环境变量 PSIM_NO_OPEN 可跳过）。
 找不到 PSIM 时先设置环境变量 PSIM_DIR 为安装目录。原生 PNG 需要 Python 3.11+ 和 Pillow 13。
+psimsch 是 PSIM 的私有格式，只能由 PSIM 自己写出，所以这一步必须在装有 PSIM 的 Windows 上完成。
 
 On a Windows PC with PSIM, double-click build.bat. It writes {name}.psimsch through PSIM's own API,
-runs the solver (result\\) and exports the drawing (drawing\\). Native PNG needs Python 3.11+ and Pillow 13.
-Set PSIM_DIR if PSIM is not found.
+runs the solver (result\\), exports the drawing (drawing\\) and opens the model in PSIM (set PSIM_NO_OPEN to
+skip). Native PNG needs Python 3.11+ and Pillow 13. Set PSIM_DIR if PSIM is not found.
 
-preview.render.png 是便携渲染的预览，不是 PSIM 原生导出。
+preview.render.png 是仿原生预览，不是 PSIM 原生导出。
 """
 
 
@@ -480,6 +521,29 @@ def package(plan_path, folder, name=None):
     }
 
 
+def psim_exe(directory):
+    exe = next((p for p in (directory / 'PSIM.exe', directory / 'psim.exe') if p.is_file()), None)
+    if exe is None:
+        raise RuntimeError(f'没有在 {directory} 找到 PSIM.exe')
+    return exe
+
+
+def open_model(source, psim_dir=None):
+    """在 Windows 上用 PSIM 打开模型，不等待窗口关闭。"""
+    source = Path(source).resolve()
+    if source.suffix.lower() != '.psimsch' or not source.is_file():
+        raise ValueError('需要已经存在的 .psimsch 文件')
+    directory = find_psim(psim_dir)
+    if os.name != 'nt' or directory is None:
+        raise RuntimeError(
+            '打开模型需要 Windows 与 PSIM；psimsch 只能由 PSIM 写出，Mac/Linux 上用 package 或 handoff 交给 Windows'
+        )
+    exe = psim_exe(directory)
+    flags = getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+    subprocess.Popen([str(exe), str(source)], creationflags=flags, close_fds=True)
+    return {'opened': str(source), 'exe': str(exe)}
+
+
 def screenshot(source, target, psim_dir=None, timeout=180.0):
     """有 PSIM 时打开软件截取窗口；否则按建模计划便携渲染。"""
     source = Path(source)
@@ -487,15 +551,29 @@ def screenshot(source, target, psim_dir=None, timeout=180.0):
     if os.name == 'nt' and directory is not None and source.suffix.lower() == '.psimsch':
         from capture import screenshot as capture
 
-        exe = next((p for p in (directory / 'PSIM.exe', directory / 'psim.exe') if p.is_file()), None)
-        if exe is None:
-            raise RuntimeError(f'没有在 {directory} 找到 PSIM.exe')
-        return capture(source, target, exe, 'PSIM', timeout=timeout)
+        return capture(source, target, psim_exe(directory), 'PSIM', timeout=timeout)
     from render import render_file
 
     result = render_file(source, target)
     result['note'] = '本机没有 PSIM，已用便携渲染代替窗口截图'
     return result
+
+
+def native_look():
+    """仿原生出图是否可用，以及用到的字体（真字体还是同度量字体）。"""
+    try:
+        from canvas import _font_faces, gdi_available
+
+        available = gdi_available()
+        fonts = {k: v['family'] for k, v in _font_faces().items()} if available else {}
+    except ImportError:
+        available, fonts = False, {}
+    hint = (
+        None
+        if available
+        else '装 Pillow，并装 Times New Roman/Arial 或同度量的 Liberation 字体（Linux：fonts-liberation）'
+    )
+    return {'available': available, 'fonts': fonts, 'hint': hint}
 
 
 def environment(psim_dir=None):
@@ -510,9 +588,21 @@ def environment(psim_dir=None):
         'os': platform.system(),
         'python': platform.python_version(),
         'pillow': pillow,
+        'native_look': native_look(),
         'psim_dir': str(directory) if directory else None,
         'native_available': os.name == 'nt' and directory is not None,
-        'portable_commands': ['check', 'plan-edit', 'render', 'package', 'handoff', 'receive', 'compare', 'deliver'],
+        'portable_commands': [
+            'check',
+            'preflight',
+            'plan-edit',
+            'render',
+            'presim',
+            'package',
+            'handoff',
+            'receive',
+            'compare',
+            'deliver',
+        ],
         'native_commands': [
             'version',
             'inspect',
@@ -521,6 +611,7 @@ def environment(psim_dir=None):
             'simulate',
             'export',
             'to-python',
+            'open',
             'screenshot（窗口）',
         ],
     }
@@ -545,6 +636,9 @@ def main():
     item.add_argument('output', type=Path)
     item = sub.add_parser('compare', help='比较原生文件哈希或 CSV 波形（不需要 PSIM）')
     item.add_argument('arguments', nargs=argparse.REMAINDER)
+    item = sub.add_parser('preflight', help='不装 PSIM 时预测原生结果：预检、仿原生预览、离线预仿真')
+    item.add_argument('plan', type=Path)
+    item.add_argument('folder', type=Path)
     sub.add_parser('env', help='报告系统、Python、Pillow 与 PSIM 可用性')
     item = sub.add_parser('check', help='排版预检')
     item.add_argument('plan', type=Path)
@@ -556,14 +650,19 @@ def main():
     item = sub.add_parser('render', help='便携渲染计划为 PNG/SVG')
     item.add_argument('plan', type=Path)
     item.add_argument('target', type=Path)
-    item.add_argument('--scale', type=float, default=4.0)
+    item.add_argument('--scale', type=float, help='像素/单位；默认按后端：gdi 用原生导出比例，其余为 4')
     from canvas import add_renderer_arguments
 
     add_renderer_arguments(item)
+    item = sub.add_parser('presim', help='离线预仿真线性电路（不需要 PSIM，结果不是 PSIM 求解）')
+    item.add_argument('plan', type=Path)
+    item.add_argument('csv', type=Path)
     item = sub.add_parser('package', help='生成 Windows 一键构建包')
     item.add_argument('plan', type=Path)
     item.add_argument('folder', type=Path)
     item.add_argument('--name')
+    item = sub.add_parser('open', help='Windows：用 PSIM 打开 psimsch')
+    item.add_argument('source', type=Path)
     item = sub.add_parser('screenshot', help='有 PSIM 时截取窗口，否则便携渲染')
     item.add_argument('source', type=Path, help='psimsch（Windows）或计划 JSON')
     item.add_argument('target', type=Path)
@@ -645,8 +744,19 @@ def main():
             from render import render_file
 
             data = render_file(args.plan, args.target, args.scale, **renderer_arguments(args))
+        elif command == 'preflight':
+            data = preflight(read_json(args.plan), args.folder)
+            failed = not data['ready_for_windows']
+        elif command == 'presim':
+            from presim import presimulate
+
+            if args.csv.suffix.lower() != '.csv':
+                raise ValueError('输出须为 .csv')
+            data = presimulate(read_json(args.plan), args.csv)
         elif command == 'package':
             data = package(args.plan, args.folder, args.name)
+        elif command == 'open':
+            data = open_model(args.source, args.psim_dir)
         elif command == 'screenshot':
             data = screenshot(args.source, args.target, args.psim_dir)
         elif command == 'deliver':

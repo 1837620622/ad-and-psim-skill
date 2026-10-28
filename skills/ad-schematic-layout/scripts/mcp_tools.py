@@ -12,7 +12,7 @@ def _schema(properties, required=()):
 PATH = {'type': 'string', 'description': '文件或目录路径（相对路径按 MCP 服务器的工作目录解析）'}
 PLAN = {'type': 'string', 'description': '建模计划 JSON 文件路径，或直接写 JSON 文本'}
 RENDER_OPTIONS = {
-    'renderer': {'type': 'string', 'enum': ['auto', 'resvg', 'pillow']},
+    'renderer': {'type': 'string', 'enum': ['auto', 'gdi', 'resvg', 'pillow']},
     'font_files': {'type': 'array', 'items': {'type': 'string'}},
     'font_dirs': {'type': 'array', 'items': {'type': 'string'}},
     'no_system_fonts': {'type': 'boolean'},
@@ -116,6 +116,14 @@ TOOLS = [
         'args': lambda a, m: ['check', m(a['plan']), *_optional(a, '--preview', 'preview')],
     },
     {
+        'name': 'ad_preflight',
+        'description': 'Any OS, no Altium needed: predict the native result before going to Windows. Runs the layout '
+        'check, predicts the netlist and the compile warnings AD will report (for example missing footprints), and '
+        'renders a Windows-look preview. ready_for_windows=true means no known blocker remains.',
+        'schema': _schema({'plan': PLAN, 'folder': PATH}, ['plan', 'folder']),
+        'args': lambda a, m: ['preflight', m(a['plan']), a['folder']],
+    },
+    {
         'name': 'ad_create',
         'description': 'Write an editable SchDoc and PrjPcb from a plan (any OS, byte-identical output). '
         'Refuses to write when the layout check has errors.',
@@ -141,8 +149,9 @@ TOOLS = [
         'description': 'Apply edit operations to a plan and re-check it. Operations: move {ref,dx,dy|to}, '
         'set_value {ref,value}, move_text {ref,field:designator|comment,at}, rename {ref,to}, add_part, '
         'remove_part, add_wire {points}, remove_wire {index|touching}, add_label, remove_label, '
-        'add_power_port, remove_power_port, set_canvas, shift_all, fit_canvas {margin}. Wires attached to '
-        'moved pins are re-routed orthogonally.',
+        'add_power_port, remove_power_port, set_canvas, shift_all, fit_canvas {margin}, place_text {refs?} '
+        '(moves designators/comments that overlap text or graphics to the first collision-free spot). Wires '
+        'attached to moved pins are re-routed orthogonally.',
         'schema': _schema(
             {
                 'plan': PLAN,
@@ -155,8 +164,9 @@ TOOLS = [
     },
     {
         'name': 'ad_render',
-        'description': 'Portable render of a SchDoc or plan to PNG/SVG that closely matches the native AD export '
-        '(no Altium needed). A preview for debugging, not a native export.',
+        'description': 'Render a SchDoc or plan without Altium. PNG defaults to the Windows-look renderer (gdi): '
+        'same pixel scale, aliased lines and ClearType-style text as the native export. Still a preview, '
+        'not a native export.',
         'schema': _schema(
             {'source': PATH, 'target': PATH, 'scale': {'type': 'number'}, **RENDER_OPTIONS}, ['source', 'target']
         ),

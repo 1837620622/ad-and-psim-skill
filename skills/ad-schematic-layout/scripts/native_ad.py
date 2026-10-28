@@ -199,6 +199,50 @@ def create(plan, folder, allow_layout_errors=False):
     }
 
 
+def preflight(plan, folder):
+    """不装 AD 时预测原生结果：排版预检、预测网表、预计的编译 warning 和仿原生预览，给出能否上 Windows 的结论。"""
+    from check_layout import check_records
+    from render import render_records
+
+    name = plan.get('name', 'Schematic')
+    if not isinstance(name, str) or not re.fullmatch(r'[\w-]+', name):
+        raise ValueError('name 只能含字母、数字、中文、下划线或短横线')
+    folder = Path(folder).resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    sheet = build(plan)
+    layout, _, _ = check_records(sheet.records, plan.get('pin_map'), grid=plan.get('grid', 10))
+    write_json(folder / 'layout-check.json', layout)
+    # 基础生成器不写封装模型；AD 编译时每个这样的器件报一条缺少封装的 warning（RC 示例实测 4 条）。
+    footprints = [
+        {'ref': part['ref'], 'message': f'{part["ref"]} 没有封装模型，AD 编译会报缺少封装的 warning'}
+        for part in plan.get('parts', [])
+        if not part.get('footprint')
+    ]
+    target = folder / f'{name}.preview.png'
+    try:
+        preview = render_records(sheet.records, target)
+    except (ImportError, RuntimeError):
+        preview = render_records(sheet.records, target.with_suffix('.svg'))
+    counts = layout['summary']
+    topology = not any(f['code'] == 'TOPOLOGY_MISMATCH' for f in layout['findings'])
+    blocking = [f'{f["code"]}: {f["message"]}' for f in layout['findings'] if f['severity'] in ('error', 'warning')]
+    return {
+        'ready_for_windows': not blocking,
+        'blocking': blocking,
+        'layout_check': dict(counts, report=str(folder / 'layout-check.json')),
+        'expected_native': {
+            'compile_errors': 0 if topology and not counts['errors'] else None,
+            'compile_warnings_missing_footprint': len(footprints),
+            'netlist_matches_pin_map': topology if plan.get('pin_map') else None,
+        },
+        'expected_warnings': footprints,
+        'preview': preview['render'],
+        'preview_renderer': preview['renderer'],
+        'native_verified': False,
+        'note': '离线预测，不代替 AD 原生编译和出图；预览为仿原生渲染。',
+    }
+
+
 # ------------------------------------------------------------------ 原生 ----
 
 
@@ -220,6 +264,17 @@ def find_ad(explicit=None):
         if candidate.name.lower() == 'x2.exe' and candidate.is_file():
             found.append(candidate)
     return max(found, key=lambda p: [int(n) for n in re.findall(r'\d+', p.parent.name)] or [0]) if found else None
+
+
+def open_project(source, ad_exe=None):
+    """在 Windows 上用 AD 打开工程或图纸，不等待窗口关闭；Mac/Linux 生成的文件可以直接这样打开。"""
+    source = Path(source).resolve()
+    if source.suffix.lower() not in ('.prjpcb', '.schdoc') or not source.is_file():
+        raise ValueError('需要已经存在的 .PrjPcb 或 .SchDoc 文件')
+    exe = require_ad(ad_exe)
+    flags = getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+    subprocess.Popen([str(exe), str(source)], creationflags=flags, close_fds=True)
+    return {'opened': str(source), 'exe': str(exe)}
 
 
 def require_ad(explicit):
@@ -409,7 +464,7 @@ def run_script(ad_exe, script, procedure, timeout):
     return {'status': invoke(ad_exe, target, procedure, job, timeout), 'job': str(job)}
 
 
-def screenshot(document, target, ad_exe=None, timeout=180.0, scale=4.0):
+def screenshot(document, target, ad_exe=None, timeout=180.0, scale=None):
     """有 AD 时打开软件截取窗口；没有时用便携渲染生成同样内容的图。"""
     exe = find_ad(ad_exe)
     if os.name == 'nt' and exe is not None:
@@ -421,6 +476,23 @@ def screenshot(document, target, ad_exe=None, timeout=180.0, scale=4.0):
     result = render_file(document, target, scale)
     result['note'] = '本机没有 AD，已用便携渲染代替窗口截图'
     return result
+
+
+def native_look():
+    """仿原生出图是否可用，以及用到的字体（真字体还是同度量字体）。"""
+    try:
+        from canvas import _font_faces, gdi_available
+
+        available = gdi_available()
+        fonts = {k: v['family'] for k, v in _font_faces().items()} if available else {}
+    except ImportError:
+        available, fonts = False, {}
+    hint = (
+        None
+        if available
+        else '装 Pillow，并装 Times New Roman/Arial 或同度量的 Liberation 字体（Linux：fonts-liberation）'
+    )
+    return {'available': available, 'fonts': fonts, 'hint': hint}
 
 
 def environment(ad_exe=None):
@@ -435,10 +507,12 @@ def environment(ad_exe=None):
         'os': platform.system(),
         'python': platform.python_version(),
         'pillow': pillow,
+        'native_look': native_look(),
         'ad_exe': str(exe) if exe else None,
         'native_available': os.name == 'nt' and exe is not None,
         'portable_commands': [
             'check',
+            'preflight',
             'create',
             'import',
             'edit',
@@ -448,7 +522,7 @@ def environment(ad_exe=None):
             'compare',
             'deliver',
         ],
-        'native_commands': ['verify', 'export', 'run-script', 'screenshot（窗口）'],
+        'native_commands': ['verify', 'export', 'run-script', 'open', 'screenshot（窗口）'],
     }
 
 
@@ -472,6 +546,9 @@ def main():
     item.add_argument('output', type=Path)
     item = sub.add_parser('compare', help='比较原生文件哈希或 CSV 波形（不需要 AD）')
     item.add_argument('arguments', nargs=argparse.REMAINDER)
+    item = sub.add_parser('preflight', help='不装 AD 时预测原生结果：预检、编译 warning、仿原生预览')
+    item.add_argument('plan', type=Path)
+    item.add_argument('folder', type=Path)
     sub.add_parser('env', help='报告系统、Python、Pillow 与 AD 可用性')
     item = sub.add_parser('check', help='排版预检（不写文件）')
     item.add_argument('plan', type=Path)
@@ -492,11 +569,13 @@ def main():
     item = sub.add_parser('render', help='便携渲染 SchDoc 或计划为 PNG/SVG')
     item.add_argument('source', type=Path)
     item.add_argument('target', type=Path)
-    item.add_argument('--scale', type=float, default=4.0)
+    item.add_argument('--scale', type=float, help='像素/单位；默认按后端：gdi 用原生导出比例，其余为 4')
     from canvas import add_renderer_arguments
 
     add_renderer_arguments(item)
-    item = sub.add_parser('screenshot', help='有 AD 时截取软件窗口，否则便携渲染')
+    item = sub.add_parser('open', help='Windows：用 AD 打开工程或图纸')
+    item.add_argument('source', type=Path)
+    item = sub.add_parser('screenshot', help='有 AD 时截取软件窗口，否则仿原生渲染')
     item.add_argument('schematic', type=Path)
     item.add_argument('target', type=Path)
     item = sub.add_parser('verify', help='原生编译与逐引脚网表')
@@ -565,6 +644,9 @@ def main():
 
             result = check_plan(read_json(args.plan), args.preview)
             failed = bool(result['summary']['errors'] or (args.strict and result['summary']['warnings']))
+        elif command == 'preflight':
+            result = preflight(read_json(args.plan), args.folder)
+            failed = not result['ready_for_windows']
         elif command == 'create':
             result = create(read_json(args.plan), args.folder, args.allow_layout_errors)
         elif command == 'import':
@@ -596,6 +678,8 @@ def main():
             from render import render_file
 
             result = render_file(args.source, args.target, args.scale, **renderer_arguments(args))
+        elif command == 'open':
+            result = open_project(args.source, args.ad_exe)
         elif command == 'screenshot':
             result = screenshot(args.schematic, args.target, args.ad_exe, args.timeout)
         elif command == 'deliver':

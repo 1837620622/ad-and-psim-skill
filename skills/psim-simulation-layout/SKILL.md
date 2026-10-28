@@ -14,7 +14,8 @@ metadata:
 
 | 操作 | 任何系统 | 需要 Windows + PSIM |
 | --- | --- | --- |
-| 写计划、排版预检、修改计划、便携渲染 | ✓ | |
+| 写计划、排版预检、修改计划、仿原生渲染 | ✓ | |
+| 离线预测、线性电路离线预仿真（`preflight`、`presim`） | ✓ | |
 | 生成 Windows 构建包（`build.bat`） | ✓ | |
 | 波形 CSV 测量、整理交付目录 | ✓ | |
 | 准备交给 Windows 的任务、接收原生 PNG/SMV/CSV、比较结果 | ✓ | |
@@ -26,13 +27,14 @@ psimsch 是 PSIM 的私有二进制格式。macOS/Linux 用 `handoff` 准备可�
 
 1. **列模型边界。** 分清设计值、工程假设、模型输入、仿真量和实测量；明确拓扑、额定值、控制方式、指定芯片、工况和交付格式。用户给的数值程序结果只能作对照，不能当 PSIM 结果。
 2. **读排版规则。** 每次排图前读 [排版硬规则](references/drafting-rules.md)。
-3. **写计划并预检。** 格式和命令见 [命令与计划格式](references/commands.md)。`check` 修到 0 error，看便携渲染。
-4. **建模。** 有 PSIM 就直接 `create`；没有就 `package`，在 Windows 上运行构建包。复杂元件先用小电路校准端口和参数，见 [建模与元件校准](references/modeling.md)。
-5. **分阶段求解。** 先看启动和明显异常，再确认稳态，然后做输入/负载扫描和阶跃。时间步长与稳态见 [求解与时间基准](references/solver-and-timebase.md)。
-6. **核验物理量。** 频率从实际波形测；效率只在稳态、方向一致、边界合适时才叫效率。见 [物理量与测量](references/physics-and-measurement.md)。
-7. **出图与交付。** `export` 的 `text_review` 必须通过，再看全图和局部；`deliver` 生成客户目录（模型和结果）和归档目录，不打压缩包。见 [图纸、波形与交付](references/delivery.md)。
+3. **写计划并预检。** 格式和命令见 [命令与计划格式](references/commands.md)。`check` 修到 0 error，看仿原生渲染。关联文字的实际起点 = AREA 水平中心 - FormatFactor，预检按这个规则判断压字压线；文字重叠是 error，可用编辑操作 `place_text` 自动摆放。
+4. **离线预测。** `preflight` 给出仿原生预览，并对线性电路做离线预仿真（与 PSIM 同类算法），先确认参数、拓扑、步长和波形量级；`ready_for_windows` 为 true 再上 Windows。离线预仿真不是 PSIM 结果，不能交付。
+5. **建模。** 有 PSIM 就直接 `create`；没有就 `package`，在 Windows 上双击 `build.bat`：PSIM 写出 psimsch、求解、出图，最后自动打开模型。psimsch 是 PSIM 的私有格式，只能由 PSIM 写出。复杂元件先用小电路校准端口和参数，见 [建模与元件校准](references/modeling.md)。
+6. **分阶段求解。** 先看启动和明显异常，再确认稳态，然后做输入/负载扫描和阶跃。时间步长与稳态见 [求解与时间基准](references/solver-and-timebase.md)。
+7. **核验物理量。** 频率从实际波形测；效率只在稳态、方向一致、边界合适时才叫效率。见 [物理量与测量](references/physics-and-measurement.md)。
+8. **出图与交付。** `export` 的 `text_review` 必须通过，再看全图和局部；`deliver` 生成客户目录（模型和结果）和归档目录，不打压缩包。见 [图纸、波形与交付](references/delivery.md)。
 
-Mac/Linux 不安装 PSIM；最终预览与仿真由 Windows 返回。离线渲染只用于近似审图，不能冒充任意原生元件的精确图像。接收原生图和数据、拒收错配结果以及比较容差，见 [交接与结果一致性](references/handoff.md)。
+Mac/Linux 不安装 PSIM；最终图纸与仿真由 Windows 返回。仿原生渲染与 RC 示例的原生导出尺寸相同，线条和文字像素 97.1% 在 1 像素内对齐，用于提前看效果；未标定的元件画成方框，不能冒充原生图形。交接任务在 Windows 运行后会对比离线预仿真与 PSIM 波形。接收原生图和数据、拒收错配结果以及比较容差，见 [交接与结果一致性](references/handoff.md)。
 
 ## 命令速查
 
@@ -41,13 +43,16 @@ Mac/Linux 不安装 PSIM；最终预览与仿真由 Windows 返回。离线渲�
 ```text
 python scripts/native_psim.py env                               # 本机能做什么
 python scripts/native_psim.py check plan.json                   # 排版预检
+python scripts/native_psim.py preflight plan.json preflight/     # 离线预测：仿原生预览 + 预仿真
+python scripts/native_psim.py presim plan.json presim.csv       # 线性电路离线预仿真（不是 PSIM 结果）
 python scripts/native_psim.py plan-edit plan.json ops.json new.json
-python scripts/native_psim.py render plan.json view.png         # PSIM 样式便携渲染
+python scripts/native_psim.py render plan.json view.png         # 仿原生渲染（无需 PSIM）
 python scripts/native_psim.py package plan.json kit/            # Windows 构建包
 python scripts/native_psim.py create plan.json model.psimsch    # Windows + PSIM
 python scripts/native_psim.py simulate model.psimsch result/
 python scripts/native_psim.py export model.psimsch drawing/model.emf
 python scripts/native_psim.py screenshot model.psimsch shot.png # 有 PSIM 截窗口，否则渲染计划
+python scripts/native_psim.py open model.psimsch                # Windows：用 PSIM 打开模型
 python scripts/analyze_waveform.py result/native.csv --pin Pin --pout Pout --end 0.5 --fundamental-hz 50 --cycles 5
 python scripts/native_psim.py deliver work/ delivery/ --name 项目名
 python scripts/native_psim.py handoff plan.json job/

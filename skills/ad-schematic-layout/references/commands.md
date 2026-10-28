@@ -11,8 +11,10 @@
 | `create PLAN DIR` | 写出 `名称.SchDoc`、`名称.PrjPcb`、`expected.json`、`layout-check.json` | 任何 |
 | `import SCHDOC PLAN [--allow-partial]` | 现有 SchDoc 转计划；有无法表示的图元时默认不写出 | 任何 |
 | `edit PLAN OPS PLAN_OUT` | 按操作清单修改计划并预检 | 任何 |
-| `render SOURCE OUT [--scale N]` | SchDoc 或计划渲染为 PNG/SVG，样式接近 AD 原生导出 | 任何 |
-| `screenshot SCHDOC OUT` | 有 AD：打开软件截取窗口；没有：改用便携渲染 | 任何 |
+| `preflight PLAN DIR` | 离线预测：排版预检、预测网表、预计的编译 warning（缺封装）、仿原生预览；`ready_for_windows` 为 false 时返回 1 | 任何 |
+| `render SOURCE OUT [--scale N] [--renderer R]` | SchDoc 或计划渲染为 PNG/SVG；PNG 默认仿 Windows 原生出图 | 任何 |
+| `screenshot SCHDOC OUT` | 有 AD：打开软件截取窗口；没有：改用仿原生渲染 | 任何 |
+| `open PRJPCB/SCHDOC` | 用 AD 打开工程或图纸（不等待窗口关闭）；Mac/Linux 生成的文件拷过去即可直接打开 | Windows + AD |
 | `verify PRJPCB DIR [--expected JSON]` | 在副本上原生编译，导出逐引脚网表并比较 | Windows + AD |
 | `export SCHDOC DIR [--dpi N]` | 原生导出 EMF 与 PNG，附文字审查 `text_review` | Windows + AD |
 | `run-script PAS PROCEDURE` | 运行本地 DelphiScript | Windows + AD |
@@ -76,6 +78,7 @@ AD 程序按顺序查找：`--ad-exe`、环境变量 `AD_EXE`、Windows 卸载�
 | `add_label` / `remove_label` | `name`、`at` | |
 | `add_power_port` / `remove_power_port` | `name`、`at`、`ground` | |
 | `set_canvas` / `shift_all` / `fit_canvas` | `canvas` / `dx`、`dy` / `margin` | `fit_canvas` 按内容缩放画布并居中 |
+| `place_text` | 可选 `refs` | 自动摆放位号和参数：对压字、压线、落进别的器件框的文字依次试上方叠放、下方叠放、上下分开、右侧、左侧，取第一个没有问题的位置；没有文字问题时不改动 |
 | `set_pin_map` | `pin_map` | 改预期连接 |
 
 `import` 生成的计划带 `pin_map`，记录导入时的连接；只改排版时，预检会确认连接没有变。导入只支持本生成器能重建的图元，带库图形或多部件的器件会列在 `unsupported` 里。
@@ -104,9 +107,9 @@ End;
 
 ## 截图
 
-`render` 的 PNG 后端可用 `--renderer auto|resvg|pillow` 选择。安装 `resvg-py==0.5.0` 后自动优先采用 resvg；可重复传 `--font-file` / `--font-dir`，并用 `--no-system-fonts` 限定字体来源。JSON 记录后端和显式字体文件哈希。字体选项仅用于 resvg PNG；SVG 的字体由查看器加载。便携图仍是近似；与实际 AD 图面一致的结果应接收 Windows 原生 PNG。
+`render` 的 PNG 后端用 `--renderer auto|gdi|resvg|pillow` 选择。`auto` 在有 Pillow 和 Times New Roman/Arial（或同度量的 Liberation）时用 `gdi`：按 Windows 原生导出标定的像素比例（约 2.16 像素/单位）、线宽、取整和 ClearType 式文字，RC 示例与原生导出尺寸相同、线条和文字像素 97.8% 在 1 像素内对齐；没有时退回 resvg 或 Pillow 平滑渲染。`--scale` 不给时按后端取默认值。`--font-file` / `--font-dir` 可指定字体文件（gdi 按字体族名替换，resvg 加入字体库）；`--no-system-fonts` 只用于 resvg。JSON 记录后端和所用字体。与实际 AD 图面一致的最终结果仍应接收 Windows 原生 PNG。
 
-`screenshot` 在 Windows 找到 AD 时：启动 AD 打开文档，等标题出现文档名，最大化，发送 Ctrl+PageDown（适合文档），截取整个窗口为 PNG。其他情况改用便携渲染，结果里 `source` 为 `portable_render`。要截已经打开的窗口：`python scripts/capture.py "Altium" shot.png`。
+`screenshot` 在 Windows 找到 AD 时：启动 AD 打开文档，等标题出现文档名，最大化，发送 Ctrl+PageDown（适合文档），截取整个窗口为 PNG。其他情况改用仿原生渲染，结果里 `source` 为 `portable_render`。要截已经打开的窗口：`python scripts/capture.py "Altium" shot.png`。
 
 ## MCP
 
@@ -118,4 +121,4 @@ python scripts/mcp_server.py --with ../../psim-simulation-layout/scripts   # 同
 npx -y github:1837620622/ad-and-psim-skill mcp       # 不用克隆仓库，需要 Node 18+
 ```
 
-工具：`ad_env`、`ad_check`、`ad_create`、`ad_import`、`ad_edit`、`ad_render`、`ad_screenshot`、`ad_verify`、`ad_export`、`ad_deliver`、`ad_handoff`、`ad_receive`、`ad_compare`。计划和操作清单参数既可以是文件路径，也可以直接写 JSON 文本；渲染和截图结果会附带图片。各客户端的配置写法见仓库 README。
+工具：`ad_env`、`ad_check`、`ad_preflight`、`ad_create`、`ad_import`、`ad_edit`、`ad_render`、`ad_screenshot`、`ad_verify`、`ad_export`、`ad_deliver`、`ad_handoff`、`ad_receive`、`ad_compare`。计划和操作清单参数既可以是文件路径，也可以直接写 JSON 文本；渲染和截图结果会附带图片。各客户端的配置写法见仓库 README。

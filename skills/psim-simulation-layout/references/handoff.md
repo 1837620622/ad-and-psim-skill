@@ -6,10 +6,10 @@ Mac/Linux 不用安装 AD 或 PSIM。计划、预检、基础 AD 文件、离线
 
 | 文件或字段 | 来源 | 一致性 |
 | --- | --- | --- |
-| `preview.render.svg/png` | 便携绘图器（任何系统） | 用来检查布局；字体和未标定器件可能与原生软件不同 |
+| `preview.render.svg/png` | 仿原生渲染（任何系统） | PNG 按原生导出标定：RC 示例与原生图尺寸相同，线条和文字像素 97% 以上在 1 像素内对齐；未标定的 PSIM 元件画成方框 |
 | `receive` 返回的 `png` | Windows 原生导出 | 与 Windows 原图 SHA-256 相同，接收端直接显示，不再渲染 |
 
-需要确认软件实际打开的图面时，查看第二种图。没有经过 Windows 的新计划只能提供近似预览，不能将它宣称为任意原生库元件的精确图像，也不能在 Mac/Linux 上冒充 PSIM 求解结果。
+需要确认软件实际打开的图面时，查看第二种图。没有经过 Windows 的新计划只有预测图，不能宣称为任意原生库元件的精确图像，也不能在 Mac/Linux 上冒充 PSIM 求解结果。
 
 ## 准备任务
 
@@ -30,7 +30,8 @@ job/
 ├── tool/scripts/           # 自带执行工具，不含 AD/PSIM 运行时
 ├── tool/references/native/ # AD 的原生脚本（PSIM 不需要）
 ├── prepared/               # 准备端生成的 SchDoc/PrjPcb（仅 AD）
-├── preview.render.svg      # 离线近似预览；有 resvg-py 或 Pillow 时另生成 PNG
+├── preview.render.svg      # 离线预览；有 Pillow 时另生成仿原生 PNG
+├── preflight/              # 离线预测：预检报告、仿原生预览、PSIM 离线预仿真 presim.csv
 ├── native-request.json     # 输入和工具文件清单
 ├── README.txt
 └── run.bat
@@ -64,7 +65,7 @@ python scripts/native_psim.py receive work/job-psim work/returned-psim work/fina
 
 第一项是准备端保留的原任务，第二项是返回的结果目录，第三项是新的接收目录。接收器验证请求、计划与每个文件的 SHA-256，拒绝不匹配的任务、修改过的文件、失败结果和越界路径。
 
-返回 `native_verified=true`、`preview_bytes_identical=true` 与图片路径 `png`。原生 PNG、工程、SMV/CSV 都按字节复制；不换字体，不缩放重绘，不插值原始波形。清单证明对应关系和传输完整性，工程与物理结论仍按实际模型和软件版本核对。
+返回 `native_verified=true`、`preview_bytes_identical=true` 与图片路径 `png`。返回清单的 `forecast` 记录离线预测和原生结果的对照：AD 是预计与实际的编译 warning 数（`match`），PSIM 是离线预仿真与 PSIM 波形在同一时间点上的最大偏差（容差 1e-3）；对照只作记录，不影响原生结果是否通过。原生 PNG、工程、SMV/CSV 都按字节复制；不换字体，不缩放重绘，不插值原始波形。清单证明对应关系和传输完整性，工程与物理结论仍按实际模型和软件版本核对。
 
 ## 比较结果
 

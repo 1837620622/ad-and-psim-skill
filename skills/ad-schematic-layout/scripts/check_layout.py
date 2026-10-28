@@ -725,10 +725,10 @@ def check_records(records, pin_map=None, grid=10):
             a, b = texts[i], texts[j]
             if overlap(a['ink'], b['ink'], 0.3):
                 add(
-                    'warning',
+                    'error',
                     'TEXT_OVERLAP',
                     f'文字重叠：{a["text"]!r} 与 {b["text"]!r}',
-                    '移开其中一个文字，保持至少一个字高的一半作为间距。',
+                    '移开其中一个文字，保持至少半个字高的间距；位号和参数可用编辑操作 {"op": "place_text"} 自动摆放。',
                     a['ink'][:2],
                 )
     obstacles = [(seg, 'wire', None) for seg in wires]
@@ -757,7 +757,7 @@ def check_records(records, pin_map=None, grid=10):
                 'warning',
                 'TEXT_ON_GRAPHICS',
                 f'文字 {item["text"]!r} 压在{"、".join(sorted(set(hits)))}上',
-                '把文字移到空白处：位号/参数放在器件外侧，网络名放在导线上方。',
+                '把文字移到空白处：位号/参数放在器件外侧（可用 {"op": "place_text"} 自动摆放），网络名放在导线上方。',
                 item['ink'][:2],
             )
         for part, body in bodies:

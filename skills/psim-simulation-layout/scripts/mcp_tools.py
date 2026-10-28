@@ -12,7 +12,7 @@ def _schema(properties, required=()):
 PATH = {'type': 'string', 'description': '文件或目录路径（相对路径按 MCP 服务器的工作目录解析）'}
 PLAN = {'type': 'string', 'description': '建模计划 JSON 文件路径，或直接写 JSON 文本'}
 RENDER_OPTIONS = {
-    'renderer': {'type': 'string', 'enum': ['auto', 'resvg', 'pillow']},
+    'renderer': {'type': 'string', 'enum': ['auto', 'gdi', 'resvg', 'pillow']},
     'font_files': {'type': 'array', 'items': {'type': 'string'}},
     'font_dirs': {'type': 'array', 'items': {'type': 'string'}},
     'no_system_fonts': {'type': 'boolean'},
@@ -139,11 +139,20 @@ TOOLS = [
         'args': lambda a, m: ['check', m(a['plan'])],
     },
     {
+        'name': 'psim_preflight',
+        'description': 'Any OS, no PSIM needed: predict the native result before going to Windows. Runs the layout '
+        'check with native text positions, renders a Windows-look preview and pre-simulates linear circuits. '
+        'ready_for_windows=true means no known blocker remains.',
+        'schema': _schema({'plan': PLAN, 'folder': PATH}, ['plan', 'folder']),
+        'args': lambda a, m: ['preflight', m(a['plan']), a['folder']],
+    },
+    {
         'name': 'psim_plan_edit',
         'description': 'Apply edit operations to a PSIM plan and re-check it. Operations: move {name|type, '
         'dx,dy|to} (wire ends on its ports follow and are re-squared around symbols), set {name,field,value}, '
         'move_text {name,field,dx,dy|area}, add_element, remove_element, add_wire {from,to}, remove_wire {at}, '
-        'shift_all {dx,dy}.',
+        'shift_all {dx,dy}, place_text {names?} (re-places labels that overlap text, symbols or wires, using '
+        'the native text rule).',
         'schema': _schema(
             {
                 'plan': PLAN,
@@ -156,8 +165,8 @@ TOOLS = [
     },
     {
         'name': 'psim_render',
-        'description': 'Portable render of a PSIM plan to PNG/SVG in PSIM style (no PSIM needed). '
-        'A preview for debugging, not a native export.',
+        'description': 'Render a PSIM plan without PSIM. PNG defaults to the Windows-look renderer (gdi) with the '
+        'native export scale, margins and text placement. Still a preview, not a native export.',
         'schema': _schema(
             {'plan': PLAN, 'target': PATH, 'scale': {'type': 'number'}, **RENDER_OPTIONS}, ['plan', 'target']
         ),
@@ -168,6 +177,14 @@ TOOLS = [
             *_optional(a, '--scale', 'scale'),
             *_render_options(a),
         ],
+    },
+    {
+        'name': 'psim_presim',
+        'description': 'Any OS: offline pre-simulation of a linear plan (R, L, C, VDC, VSIN, probes) with the same '
+        'method class as PSIM (nodal analysis, fixed-step trapezoidal). Writes a CSV and step/duration findings. '
+        'Not a PSIM result; refuses switches and controls.',
+        'schema': _schema({'plan': PLAN, 'csv': PATH}, ['plan', 'csv']),
+        'args': lambda a, m: ['presim', m(a['plan']), a['csv']],
     },
     {
         'name': 'psim_package',
