@@ -77,7 +77,7 @@ AD and PSIM run only on Windows. Everything that does not need the software is p
 | AD compile/export, PSIM create/solve, window screenshots | ✓ (with the software) | Hand over to a Windows PC with the software |
 | Waveform measurement, delivery | ✓ | ✓ |
 
-Mac/Linux does not need AD or PSIM: AD files can be written there directly and are compiled and exported on Windows before delivery; PSIM models and results always come from PSIM on Windows. See [Prepare on Mac/Linux, run on Windows](#prepare-on-maclinux-run-on-windows) under Usage.
+Mac/Linux does not need AD or PSIM: AD files can be written there directly and are compiled and exported on Windows before delivery; PSIM models and results always come from PSIM on Windows. See [Making PSIM simulation files on a Mac or a PC without PSIM](#making-psim-simulation-files-on-a-mac-or-a-pc-without-psim) and [Prepare on Mac/Linux, run on Windows](#prepare-on-maclinux-run-on-windows) under Usage.
 
 ### How the result matches what Windows shows
 
@@ -176,6 +176,18 @@ python $PSIM/scripts/native_psim.py presim $PSIM/assets/rc-filter-plan.json work
 
 All commands: [AD commands](skills/ad-schematic-layout/references/commands.md), [PSIM commands](skills/psim-simulation-layout/references/commands.md).
 
+### Making PSIM simulation files on a Mac or a PC without PSIM
+
+Only PSIM itself can write a psimsch (see the [FAQ](#faq)), so the work is split: the machine without PSIM settles everything it can, and Windows needs a single double-click.
+
+1. **Write the plan and check it**: run `check plan.json` until it reports 0 errors. When text overlaps text or wires, the `place_text` operation of `plan-edit` moves it to a free position.
+2. **Forecast offline**: `preflight plan.json work/preflight` writes a Windows-look preview and pre-simulates linear circuits (`presim.csv`), so topology, values and waveform levels are checked first. Continue when `ready_for_windows` is true.
+3. **Package**: `package plan.json work/psim-kit` builds the kit; use `handoff` (next section) when the results must come back verified.
+4. **Double-click on Windows**: copy the folder to a Windows PC with PSIM and 64-bit Python 3.10+, then double-click `build.bat`. PSIM writes `name.psimsch`, solves it into SMV and CSV under `result\`, exports the native drawing to `drawing\` and finally opens the model.
+5. **If something fails**: the window stays open with the reason, and every step is recorded in `build-report.json`. Fix the cause and double-click again. An existing psimsch is reused, so edits made in PSIM are kept; only the solve and the drawing are redone.
+
+Without a Windows PC, a Windows virtual machine or a remote desktop to a PC with PSIM can be used. Neither has been verified with this package; whether PSIM runs and activates its license in a virtual machine is up to PSIM.
+
 ### Prepare on Mac/Linux, run on Windows
 
 On a computer without AD or PSIM, `handoff` prepares a job folder with the plan, the tools that run it and an offline preview:
@@ -185,7 +197,7 @@ python $AD/scripts/native_ad.py handoff $AD/assets/rc-filter-plan.json work/job-
 python $PSIM/scripts/native_psim.py handoff $PSIM/assets/rc-filter-plan.json work/job-psim --name RC_Filter
 ```
 
-Copy the whole folder to a Windows PC with the licensed software (plus Python 3.11+ and Pillow 13) and double-click `run.bat`. The software is found through the registry and common folders; set `AD_EXE` or `PSIM_DIR` if it is not. AD creates, compiles, compares nets and exports; PSIM creates, solves and exports. Any failed stage stops the run and keeps the diagnostics.
+Copy the whole folder to a Windows PC with the licensed software (plus 64-bit Python 3.11+ and Pillow 13: `py -3 -m pip install Pillow==13.0.0`) and double-click `run.bat`. The software is found through the registry and common folders; set `AD_EXE` or `PSIM_DIR` if it is not. AD creates, compiles, compares nets and exports; PSIM creates, solves and exports. Any failed stage stops the run, the window stays open with the reason and the diagnostics stay in `native-results\`. Fix the cause and double-click again: the failed attempt is renamed to `native-results.failed-1` and so on, and a passed result is never overwritten.
 
 Copy the resulting `native-results/` back (here as `work/returned-ad` and `work/returned-psim`) and receive it:
 
@@ -301,7 +313,7 @@ No. The generator writes the same bytes on every OS; the tests pin the SHA-256 o
 
 **Can a Mac produce a psimsch that opens with a double-click?**
 
-No. psimsch is PSIM's closed format; even commercial tools such as Typhoon HIL and SIMBA need PSIM to export a netlist first. On Mac/Linux this package builds a kit instead: double-click `build.bat` on a Windows PC with PSIM and PSIM writes the psimsch, solves it, exports the drawing and finally opens the model. AD is different: SchDoc and PrjPcb are written directly on any OS and open in AD with a double-click on Windows (or `native_ad.py open`). Cross-OS jobs use `handoff` and `run.bat` with a verifiable return manifest.
+No. psimsch is PSIM's closed format: only the version line at the top is plain text and the body is encoded. To build PSIM schematics from outside, Altair points to PSIM's Python API, which runs on a PC with PSIM installed. Commercial tools such as Typhoon HIL and SIMBA need PSIM to export a netlist first, and online design tools that produce PSIM models hand over a script that runs inside PSIM. On Mac/Linux this package builds a kit instead: double-click `build.bat` on a Windows PC with PSIM and PSIM writes the psimsch, solves it, exports the drawing and finally opens the model. Step by step: [Making PSIM simulation files on a Mac or a PC without PSIM](#making-psim-simulation-files-on-a-mac-or-a-pc-without-psim). AD is different: SchDoc and PrjPcb are written directly on any OS and open in AD with a double-click on Windows (or `native_ad.py open`). Cross-OS jobs use `handoff` and `run.bat` with a verifiable return manifest.
 
 **Skills or MCP?**
 

@@ -8,7 +8,8 @@
 - `preflight`：上 Windows 前的离线预测。AD 给出预计的编译 error/warning（RC 示例预测 4 条缺少封装，与实测一致）和网表对照；PSIM 给出仿原生预览和离线预仿真。`ready_for_windows` 为 true 时没有已知阻碍。
 - `presim`（PSIM）：用与 PSIM 同类的算法（节点分析 + 固定步长梯形积分）离线预仿真 R、L、C、直流源、正弦源和电压探头组成的线性电路，输出 CSV 并检查步长和时长；其他元件直接拒绝。
 - 交接任务带上离线预测；Windows 运行后返回清单的 `forecast` 记录预测与实际的对照。
-- `place_text` 编辑操作（AD、PSIM）：自动把压字、压线、压符号的位号和参数挪到第一个没有冲突的位置。
+- `place_text` 编辑操作（AD、PSIM）：自动把压字、压线、压符号的位号和参数（AD 还包括出图框的）挪到第一个没有冲突的位置；单独挪不开时把附近的文字一起放回标准位置再摆；加 `"all": true` 时先把全部文字放回标准位置，让全图标注统一。
+- 文字贴线检查（AD、PSIM）：文字离导线、引脚或符号不到 2 个单位时报 `TEXT_NEAR_LINE` warning，`place_text` 一并处理。
 - `open` 命令：Windows 上用 AD 打开工程、用 PSIM 打开模型；PSIM 构建包最后自动打开做好的 psimsch（`PSIM_NO_OPEN` 可跳过）。
 - MCP 增加 `ad_preflight`、`psim_preflight`、`psim_presim`，共 32 个工具。
 
@@ -18,8 +19,14 @@
 - PSIM 文字位置按原生规则估算（起点 = AREA 水平中心 - FormatFactor，字号 6/7·|FontSize|），与原生导出实测相差不超过 2 个单位；电源和探头按圆形判断压字，同一文字压同一元件只报一次。
 - PSIM 电阻锯齿和 AD 引脚号位置按原生导出重新标定。
 - 交付时 `preflight/` 目录和 presim 文件进归档目录，不会被当成 PSIM 结果交给客户。
+- PSIM 构建包的 `build.bat` 改为调用新的 `build` 命令：先查 Python 3.10+；每一步写入 `build-report.json`，失败时窗口停住显示原因；再次双击沿用已有的 psimsch（不覆盖在 PSIM 里改过的模型），只重新求解和出图；模型建好后即使求解或出图失败也会打开。批处理只含 ASCII，中文名称经 `kit.json` 传递。
+- 交接任务的 `run.bat` 先查 Python 3.11+ 和 Pillow，缺少时在启动 AD/PSIM 之前停下并给出安装命令；失败时窗口停住；再次运行时把上次没通过的结果改名为 `native-results.failed-N` 保留，已通过的结果不覆盖。
+- 32 位或 ARM64 的 Python 载入 PSIM 接口失败时，报出当前 Python 的架构并提示改用与 PSIM 相同架构的 Python。
+- `PSIM_DIR`、`AD_EXE` 带引号也能找到（资源管理器“复制文件地址”和 `set X="..."` 会把引号带进去）；`build.bat` 不再把 `PSIM_DIR` 作为参数转交，以反斜杠结尾的路径不会再把后面的参数吞掉。
+- AD 左右朝向的电源端口名称按 AD 的规则从符号末端向外读，不再误报压在自己的符号上。
+- MCP 的 `--with` 相对路径先按当前目录找，找不到再按 `mcp_server.py` 所在目录找；目录里没有 `mcp_tools.py` 时直接报错，不再启动后崩溃。
 
-This release adds a Windows-look renderer calibrated against native exports, offline forecasts (`preflight`), linear PSIM pre-simulation (`presim`), automatic label placement (`place_text`) and one-click opening on Windows. Overlapping text is now an error in both checkers. psimsch remains PSIM's closed format: it is written by PSIM itself on Windows and then opened automatically.
+This release adds a Windows-look renderer calibrated against native exports, offline forecasts (`preflight`), linear PSIM pre-simulation (`presim`), automatic label placement (`place_text`) and one-click opening on Windows. Overlapping text is now an error in both checkers. `build.bat` and `run.bat` check Python first, keep the window open on failure and can simply be run again after a fix. psimsch remains PSIM's closed format: it is written by PSIM itself on Windows and then opened automatically.
 
 ## 1.2.1
 

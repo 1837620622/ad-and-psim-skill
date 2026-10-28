@@ -276,6 +276,105 @@ class TextPlacement(unittest.TestCase):
             self.assertEqual(check_layout.check_plan(placed)['summary']['warnings'], 0)
             self.assertEqual(psim_plan.apply_edits(plan(PSIM), [{'op': 'place_text'}]), plan(PSIM))
 
+    def test_ad_text_touching_a_wire_is_reported_and_moved_away(self):
+        with load(AD, 'plan_tools') as (plan_tools,):
+            # 墨迹底边约在 y=149.98，紧贴 y=150 的导线但不压线。
+            touching = plan_tools.apply_edits(
+                plan(AD), [{'op': 'move_text', 'ref': 'R1', 'field': 'comment', 'at': [210, 148]}]
+            )
+            problems = plan_tools._text_problems(touching)[0]
+            self.assertEqual([(f['code'], f['severity']) for f in problems], [('TEXT_NEAR_LINE', 'warning')])
+            placed = plan_tools.apply_edits(touching, [{'op': 'place_text'}])
+            self.assertEqual(plan_tools._text_problems(placed)[0], [])
+
+    def test_ad_text_outside_the_border_is_moved_back(self):
+        with load(AD, 'plan_tools', 'check_layout') as (plan_tools, check_layout):
+            outside = plan_tools.apply_edits(
+                plan(AD), [{'op': 'move_text', 'ref': 'J1', 'field': 'designator', 'at': [14, 155]}]
+            )
+            self.assertIn('OUTSIDE_BORDER', {f['code'] for f in check_layout.check_plan(outside)['findings']})
+            placed = plan_tools.apply_edits(outside, [{'op': 'place_text'}])
+            self.assertEqual(check_layout.check_plan(placed)['summary']['errors'], 0)
+            self.assertEqual(plan_tools._text_problems(placed)[0], [])
+
+    def test_ad_horizontal_power_names_read_away_from_the_symbol(self):
+        # 朝右、朝左的电源名称在符号末端外侧（与 render.py 一致），不能被当成压着自己的符号。
+        sideways = plan(AD)
+        sideways['canvas'] = [420, 300]
+        for x, orientation, sign in ((100, 0, -1), (300, 2, 1)):
+            for y, ground in ((220, False), (260, True)):
+                sideways['power_ports'].append(
+                    {'name': 'PGND' if ground else 'VCC5', 'at': [x, y], 'ground': ground, 'orientation': orientation}
+                )
+                sideways['wires'].append([[x, y], [x + 40 * sign, y]])
+        with load(AD, 'check_layout') as (check_layout,):
+            findings = check_layout.check_plan(sideways)['findings']
+            self.assertEqual([f for f in findings if f['code'].startswith('TEXT')], [])
+            sideways['wires'].append([[125, 210], [125, 230]])
+            codes = {f['code'] for f in check_layout.check_plan(sideways)['findings']}
+            self.assertIn('TEXT_ON_GRAPHICS', codes)
+
+    def test_ad_place_text_all_restores_standard_positions(self):
+        with load(AD, 'plan_tools') as (plan_tools,):
+            # 两处文字挪开但互不冲突：普通 place_text 不动，all 放回标准位置。
+            scattered = plan_tools.apply_edits(
+                plan(AD),
+                [
+                    {'op': 'move_text', 'ref': 'R1', 'field': 'designator', 'at': [100, 180]},
+                    {'op': 'move_text', 'ref': 'C1', 'field': 'comment', 'at': [260, 100]},
+                ],
+            )
+            self.assertEqual(plan_tools.apply_edits(scattered, [{'op': 'place_text'}]), scattered)
+            self.assertEqual(plan_tools.apply_edits(scattered, [{'op': 'place_text', 'all': True}]), plan(AD))
+
+    def test_psim_text_touching_a_wire_is_reported_and_moved_away(self):
+        touching = plan(PSIM)
+        for item in touching['elements']:
+            if item.get('name') == 'R1':
+                # 文字底边约在 y=149.4，紧贴 y=150 的地线但不压线。
+                item['textlinks'][1]['AREA'] = [160, 138, 195, 155]
+        with load(PSIM, 'psim_plan', 'check_layout') as (psim_plan, check_layout):
+            findings = check_layout.check_plan(touching)['findings']
+            self.assertEqual([(f['code'], f['severity']) for f in findings], [('TEXT_NEAR_LINE', 'warning')])
+            placed = psim_plan.apply_edits(touching, [{'op': 'place_text'}])
+            self.assertEqual(check_layout.check_plan(placed)['summary']['warnings'], 0)
+
+    def test_psim_label_blocked_by_neighbours_is_placed_after_resetting_them(self):
+        # Vout 的名称压着探头；探头右侧和左侧的空位分别被 C1、R1 的文字占着，单独挪 Vout 挪不开。
+        blocked = plan(PSIM)
+        for item in blocked['elements']:
+            if item.get('name') == 'C1':
+                item['textlinks'][0]['AREA'] = [265, 72, 298, 89]
+            if item.get('name') == 'R1':
+                item['textlinks'][1]['AREA'] = [205, 72, 240, 89]
+            if item.get('name') == 'Vout':
+                item['textlinks'][0]['AREA'] = [236, 80, 266, 97]
+        with load(PSIM, 'psim_plan', 'check_layout') as (psim_plan, check_layout):
+            codes = [f['code'] for f in check_layout.check_plan(blocked)['findings']]
+            self.assertEqual(codes, ['TEXT_ON_SYMBOL'])
+            placed = psim_plan.apply_edits(blocked, [{'op': 'place_text'}])
+            self.assertEqual(check_layout.check_plan(placed)['findings'], [])
+
+    def test_psim_place_text_all_uses_the_first_candidate(self):
+        scattered = plan(PSIM)
+        for item in scattered['elements']:
+            if item.get('name') == 'R1':
+                item['textlinks'][0]['AREA'] = [160, 112, 190, 129]
+            if item.get('name') == 'C1':
+                item['textlinks'][1]['AREA'] = [266, 150, 296, 167]
+        with load(PSIM, 'psim_plan', 'check_layout') as (psim_plan, check_layout):
+            self.assertEqual(psim_plan.apply_edits(scattered, [{'op': 'place_text'}]), scattered)
+            placed = psim_plan.apply_edits(scattered, [{'op': 'place_text', 'all': True}])
+            self.assertEqual(check_layout.check_plan(placed)['summary']['warnings'], 0)
+            areas = {
+                item['name']: [link['AREA'] for link in item['textlinks']]
+                for item in placed['elements']
+                if item.get('textlinks')
+            }
+        # 横放的 R1 两段文字都在符号上方，竖放的 C1 都在右侧。
+        self.assertTrue(all(area[3] <= 93 for area in areas['R1']))
+        self.assertTrue(all(area[0] >= 260 for area in areas['C1']))
+
 
 class Preflight(unittest.TestCase):
     def test_ad_predicts_native_compile_result(self):

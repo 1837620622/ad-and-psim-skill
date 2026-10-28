@@ -117,6 +117,8 @@ DIRS = ((1, 0), (0, 1), (-1, 0), (0, -1))
 PASSIVES = {'R', 'C', 'L', 'Y'}
 GROUND_STYLES = {'4', '5', '6'}
 DESCENDERS = set('gjpqy(),;_[]{}|')
+# 排版规则：位号、参数、电源名和自由文字与线条至少留 2 个单位（网络名本来就贴在导线上，不查）。
+TEXT_CLEARANCE = 2.0
 LIMITATIONS = (
     '文字字框按 Times New Roman 度量估算；连接按 AD 规则（端点、热端落在导线上、同名标号）'
     '预测。通过预检不等于原生编译通过或图面已验收，仍须原生编译、原生出图和逐区审图。'
@@ -418,10 +420,12 @@ def port_geometry(port):
             (-w / 2, reach + 1 + 0.22 * h, w / 2, reach + 1 + 0.81 * h), x, y, (port['orientation'] - 1) % 4
         )
         if port['orientation'] % 2 == 0:
-            # 左右朝向时 AD 保持名称水平。
-            cx, cy = (cell[0] + cell[2]) / 2, (cell[1] + cell[3]) / 2
-            cell = (cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
-            ink = (cx - w / 2, cy - 0.3 * h, cx + w / 2, cy + 0.3 * h)
+            # 左右朝向时 AD 保持名称水平，从符号末端向外读：朝右时左对齐、朝左时右对齐（与 render.py 一致）。
+            sign = 1 if port['orientation'] == 0 else -1
+            start = x + sign * (reach + 2)
+            x1, x2 = sorted((start, start + sign * w))
+            cell = (x1, y - h / 2, x2, y + h / 2)
+            ink = (x1, y - 0.3 * h, x2, y + 0.3 * h)
         texts.append(
             {
                 'text': port['name'],
@@ -760,6 +764,24 @@ def check_records(records, pin_map=None, grid=10):
                 '把文字移到空白处：位号/参数放在器件外侧（可用 {"op": "place_text"} 自动摆放），网络名放在导线上方。',
                 item['ink'][:2],
             )
+        elif item['kind'] in ('designator', 'comment', 'power', 'text'):
+            # 留 0.1 的取整余量，避免恰好 2 个单位的默认摆放被误报。
+            near_box = shrink(item['ink'], -(TEXT_CLEARANCE - 0.1))
+            near = []
+            for seg, kind, _ in obstacles:
+                if kind == 'power':
+                    if overlap(near_box, (seg[0][0], seg[0][1], seg[1][0], seg[1][1])):
+                        near.append('电源符号')
+                elif segment_hits_box(seg, near_box):
+                    near.append({'wire': '导线', 'pin': '引脚', 'body': '器件图形'}[kind])
+            if near:
+                add(
+                    'warning',
+                    'TEXT_NEAR_LINE',
+                    f'文字 {item["text"]!r} 贴着{"、".join(sorted(set(near)))}，间距不到 {TEXT_CLEARANCE:g} 个单位',
+                    '文字与线条至少留 2 个单位（20 mil）；位号和参数可用 {"op": "place_text"} 自动摆放。',
+                    item['ink'][:2],
+                )
         for part, body in bodies:
             if part is item.get('owner') or part['passive']:
                 continue

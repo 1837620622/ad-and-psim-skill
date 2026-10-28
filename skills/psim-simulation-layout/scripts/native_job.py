@@ -24,8 +24,18 @@ setlocal
 cd /d "%~dp0"
 set "PY=py -3"
 %PY% --version >nul 2>&1 || set "PY=python"
-%PY% tool\scripts\native_job.py run .
-exit /b %errorlevel%
+%PY% -c "import sys; sys.exit(sys.version_info < (3, 11))" >nul 2>&1 || goto :nopython
+%PY% tool\scripts\native_job.py run . || goto :fail
+exit /b 0
+:nopython
+echo Python 3.11 or newer was not found. Install 64-bit Python from https://www.python.org/downloads/windows/
+echo and tick "Add python.exe to PATH", then double-click run.bat again.
+goto :stop
+:fail
+echo Native run failed. Read the message above and native-results\native-result.json.
+:stop
+if not defined NATIVE_NO_PAUSE pause
+exit /b 1
 """
 
 
@@ -170,9 +180,11 @@ def _fill_job(tool, folder, plan, name, dependencies, check):
         '将整个目录复制到装有对应软件、Python 3.11+ 和 Pillow 13 的 Windows，双击 run.bat。\n'
         '自动查找失败时设置 AD_EXE 为 X2.EXE，或设置 PSIM_DIR 为 PSIM 安装目录。\n'
         '运行产生 native-results/。将该目录复制回准备任务的电脑，配合原任务运行 receive。\n'
+        '失败时窗口停住显示原因；改好后再次双击 run.bat，上次未通过的结果改名为 native-results.failed-N 保留。\n'
         'receive 验证请求、计划和每个文件的 SHA-256，原生图片和数据保持原样。\n\n'
         'No vendor software is needed on Mac/Linux. Use Python 3.11+ and Pillow 13 on the licensed Windows host.\n'
         'Return native-results/ and use receive with the original job. Native PNG/SMV/CSV are copied unchanged.\n'
+        'After a failure, fix the cause and run run.bat again; the failed attempt is kept as native-results.failed-N.\n'
         'A portable render is approximate; it is never relabelled as a native export or solver result.\n',
         encoding='utf-8-sig',
     )
@@ -219,11 +231,34 @@ def _fill_job(tool, folder, plan, name, dependencies, check):
     }
 
 
+def _set_aside_failed(results):
+    """重跑时把上次未通过（或中途停下）的结果改名保留；上次已通过则不动，由 empty_folder 拒绝覆盖。"""
+    if not results.is_dir() or not any(results.iterdir()):
+        return results
+    previous = results / RESULT
+    try:
+        passed = previous.is_file() and read_json(previous).get('passed') is True
+    except (ValueError, AttributeError):
+        passed = False
+    if not passed:
+        number = 1
+        while results.with_name(f'{results.name}.failed-{number}').exists():
+            number += 1
+        results.rename(results.with_name(f'{results.name}.failed-{number}'))
+    return results
+
+
 def run(job, *, ad_exe=None, psim_dir=None, timeout=180):
     if os.name != 'nt':
         raise RuntimeError('run 需要装有相应软件的 Windows；Mac/Linux 使用 handoff 和 receive')
     if not (math.isfinite(timeout) and timeout > 0):
         raise ValueError('timeout 须为有限正数')
+    # 原生 PNG 是通过条件之一；先查依赖，免得软件跑完才发现缺 Pillow。
+    if importlib.util.find_spec('PIL') is None:
+        raise RuntimeError(
+            'Windows 执行端缺少 Pillow，无法把原生 EMF 转成 PNG；'
+            '先运行 py -3 -m pip install Pillow==13.0.0，再双击 run.bat'
+        )
     job = Path(job).resolve()
     request = read_json(job / REQUEST)
     if not isinstance(request, dict):
@@ -234,7 +269,7 @@ def run(job, *, ad_exe=None, psim_dir=None, timeout=180):
     plan = job / 'input/plan.json'
     if digest(plan) != request['plan_sha256']:
         raise ValueError('计划哈希与请求不一致')
-    output = empty_folder(job / 'native-results')
+    output = empty_folder(_set_aside_failed(job / 'native-results'))
     tool, name = request['tool'], request['name']
     if not re.fullmatch(r'[\w-]+', name):
         raise ValueError('任务名称无效')

@@ -77,7 +77,7 @@ AD 和 PSIM 只有 Windows 版。本包把能脱离软件完成的工作都做�
 | AD 编译与出图、PSIM 建模与求解、窗口截图 | ✓（需装软件） | 交给有软件的 Windows 电脑 |
 | 波形测量、整理交付 | ✓ | ✓ |
 
-Mac/Linux 不用装 AD/PSIM：AD 文件可以直接在 Mac/Linux 上生成，交付前到 Windows 原生编译、出图；PSIM 模型和仿真结果都由 Windows 上的 PSIM 生成。具体做法见「使用」里的[在 Mac/Linux 上准备，交给 Windows 运行](#在-maclinux-上准备交给-windows-运行)。
+Mac/Linux 不用装 AD/PSIM：AD 文件可以直接在 Mac/Linux 上生成，交付前到 Windows 原生编译、出图；PSIM 模型和仿真结果都由 Windows 上的 PSIM 生成。具体做法见「使用」里的[在 Mac 或没装 PSIM 的电脑上做 PSIM 仿真文件](#在-mac-或没装-psim-的电脑上做-psim-仿真文件)和[在 Mac/Linux 上准备，交给 Windows 运行](#在-maclinux-上准备交给-windows-运行)。
 
 ### 怎样做到和 Windows 上看到的一样
 
@@ -173,6 +173,18 @@ python $PSIM/scripts/native_psim.py presim $PSIM/assets/rc-filter-plan.json work
 
 全部命令见 [AD 命令](skills/ad-schematic-layout/references/commands.md) 和 [PSIM 命令](skills/psim-simulation-layout/references/commands.md)。
 
+### 在 Mac 或没装 PSIM 的电脑上做 PSIM 仿真文件
+
+psimsch 只能由 PSIM 自己写出（原因见[常见问题](#常见问题)），所以分成两半：没装 PSIM 的电脑把能定的都定好，Windows 上只双击一次。
+
+1. **写计划并预检**：`check plan.json` 到 0 error。文字压字、压线时，用 `plan-edit` 的 `place_text` 操作自动摆到不冲突的位置。
+2. **离线预测**：`preflight plan.json work/preflight` 输出仿原生预览，并对线性电路离线预仿真（`presim.csv`），先确认拓扑、参数和波形量级；`ready_for_windows` 为 true 再往下走。
+3. **打包**：`package plan.json work/psim-kit` 生成构建包；需要回传校验时改用下一节的 `handoff`。
+4. **在 Windows 上双击**：把目录拷到装有 PSIM 和 64 位 Python 3.10+ 的 Windows 电脑，双击 `build.bat`。PSIM 写出 `名称.psimsch`，求解得到 `result\` 里的 SMV 和 CSV，原生出图到 `drawing\`，最后自动打开模型。
+5. **出错时**：窗口停住显示原因，每一步的结果写在 `build-report.json`；改好后再双击一次。已有的 psimsch 会沿用，不覆盖你在 PSIM 里改过的内容，只重新求解和出图。
+
+手边没有 Windows 电脑时，可以用 Windows 虚拟机或远程桌面连到装有 PSIM 的电脑。这两种方式本包没有验证过；PSIM 能否在虚拟机里运行、许可能否激活，以 PSIM 的说明为准。
+
 ### 在 Mac/Linux 上准备，交给 Windows 运行
 
 没有 AD/PSIM 的电脑上用 `handoff` 准备一个任务目录，里面带好计划、执行脚本和离线预览：
@@ -182,7 +194,7 @@ python $AD/scripts/native_ad.py handoff $AD/assets/rc-filter-plan.json work/job-
 python $PSIM/scripts/native_psim.py handoff $PSIM/assets/rc-filter-plan.json work/job-psim --name RC_Filter
 ```
 
-把整个目录拷到装有软件的 Windows 电脑（还需要 Python 3.11+ 和 Pillow 13），双击 `run.bat`。软件位置会从注册表和常见目录自动查找，找不到时设置 `AD_EXE` 或 `PSIM_DIR`。AD 依次生成、编译、比对网表、原生出图；PSIM 依次建模、求解、原生出图。任何一步失败就停下，并保留诊断信息。
+把整个目录拷到装有软件的 Windows 电脑（还需要 64 位 Python 3.11+ 和 Pillow 13：`py -3 -m pip install Pillow==13.0.0`），双击 `run.bat`。软件位置会从注册表和常见目录自动查找，找不到时设置 `AD_EXE` 或 `PSIM_DIR`。AD 依次生成、编译、比对网表、原生出图；PSIM 依次建模、求解、原生出图。任何一步失败就停下，窗口停住显示原因，诊断信息留在 `native-results\`；改好后再双击一次，上次没通过的结果改名为 `native-results.failed-1` 等保留，已经通过的结果不会被覆盖。
 
 把 Windows 上生成的 `native-results/` 拷回来（下例放在 `work/returned-ad`、`work/returned-psim`），再接收：
 
@@ -298,7 +310,7 @@ python $PSIM/scripts/native_psim.py deliver work/ delivery/ --name 项目名    
 
 **能不能在 Mac 上直接生成双击就能打开的 psimsch？**
 
-不能。psimsch 是 PSIM 不公开的私有格式，连 Typhoon HIL、SIMBA 这类商业工具也要先在 PSIM 里导出网表才能读。所以本包在 Mac/Linux 上生成构建包：拷到装有 PSIM 的 Windows 电脑双击 `build.bat`，由 PSIM 自己写出 psimsch、求解、出图，最后自动在 PSIM 里打开做好的模型。AD 不一样：SchDoc 和 PrjPcb 在任何系统上都能直接生成，拷到 Windows 双击就能在 AD 里打开（也可以用 `native_ad.py open`）。跨系统交接用 `handoff` 和 `run.bat`，另有可校验的返回清单。
+不能。psimsch 是 PSIM 不公开的私有格式：文件开头只有明文版本号，正文经过编码；从外部生成 PSIM 原理图，Altair 给的途径是 PSIM 的 Python 接口，要在装有 PSIM 的电脑上运行。Typhoon HIL、SIMBA 这类商业工具要先在 PSIM 里导出网表才能读，在线设计工具生成 PSIM 模型时也是给出脚本、在 PSIM 里运行。所以本包在 Mac/Linux 上生成构建包：拷到装有 PSIM 的 Windows 电脑双击 `build.bat`，由 PSIM 自己写出 psimsch、求解、出图，最后自动在 PSIM 里打开做好的模型。完整步骤见[在 Mac 或没装 PSIM 的电脑上做 PSIM 仿真文件](#在-mac-或没装-psim-的电脑上做-psim-仿真文件)。AD 不一样：SchDoc 和 PrjPcb 在任何系统上都能直接生成，拷到 Windows 双击就能在 AD 里打开（也可以用 `native_ad.py open`）。跨系统交接用 `handoff` 和 `run.bat`，另有可校验的返回清单。
 
 **技能和 MCP 选哪个？**
 

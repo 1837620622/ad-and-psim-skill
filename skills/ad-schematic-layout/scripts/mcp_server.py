@@ -189,7 +189,17 @@ def main():
     )
     parser.add_argument('--list', action='store_true', help='只列出工具后退出')
     args = parser.parse_args()
-    server = Server([Path(__file__).resolve().parent, *args.extra])
+    here = Path(__file__).resolve().parent
+    extra = []
+    for given in args.extra:
+        # 相对路径先按当前目录找，找不到再按本脚本所在目录找（文档里的 ../../另一个技能/scripts 就是这样写的）。
+        folder = given
+        if not folder.is_absolute() and not (folder / 'mcp_tools.py').is_file():
+            folder = here / given
+        if not (folder / 'mcp_tools.py').is_file():
+            parser.error(f'--with 目录里没有 mcp_tools.py：{folder}')
+        extra.append(folder)
+    server = Server([here, *extra])
     if args.list:
         print(json.dumps([t['name'] for t in server.describe()], ensure_ascii=False))
         return 0

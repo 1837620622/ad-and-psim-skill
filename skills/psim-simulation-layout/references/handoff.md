@@ -41,7 +41,7 @@ job/
 
 ## Windows 执行
 
-将整个目录复制到 Windows。需要 Python 3.11+、Pillow 13 和相应的已授权软件；不需要克隆仓库。双击 `run.bat`，也可运行：
+将整个目录复制到 Windows。需要 64 位 Python 3.11+、Pillow 13（`py -3 -m pip install Pillow==13.0.0`）和相应的已授权软件；不需要克隆仓库。缺少 Pillow 时 `run` 在启动软件之前就停下。双击 `run.bat`，也可运行：
 
 ```text
 python tool/scripts/native_job.py run . --timeout 600
@@ -52,7 +52,7 @@ python tool/scripts/native_job.py run . --timeout 600
 - AD：生成新副本，核对与准备端生成的 SchDoc 字节相同，原生编译；给定 `pin_map` 时比较逐引脚同网关系，再原生导出并检查文字。
 - PSIM：用实际 API 建模，原生求解，保留 SMV 与 CSV，再原生导出并检查文字。
 - 任何原生阶段失败都返回非零状态；`text_review.passed=false` 也算失败。失败结果留在原目录供诊断，不能作为已通过结果接收。
-- 原生执行写入新的 `native-results/`，已有非空目录不会被覆盖。修改计划后准备新任务目录，避免混入旧结果。
+- 原生执行写入 `native-results/`。失败时窗口停住显示原因（设置 `NATIVE_NO_PAUSE` 不停）；改好原因后直接再双击 `run.bat`，上次未通过或中途停下的结果改名为 `native-results.failed-N` 保留。已通过的结果不会被覆盖。修改计划后准备新任务目录，避免混入旧结果。
 
 ## 接收原图与原始结果
 

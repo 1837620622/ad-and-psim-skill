@@ -20,6 +20,9 @@ LIMITATIONS = (
 )
 
 
+TEXT_CLEARANCE = 2.0
+
+
 def overlap(a, b, inset=0.0):
     return min(a[2], b[2]) - max(a[0], b[0]) > inset and min(a[3], b[3]) - max(a[1], b[1]) > inset
 
@@ -192,12 +195,13 @@ def check_plan(plan, grid=10):
                     t['box'][:2],
                 )
         # 同一段文字压到同一个元件只报一次（元件按引线、主体分块判断）。
-        for name in dict.fromkeys(name for name, part in parts if part_overlaps(part, t['box'], 0.5)):
+        touched = list(dict.fromkeys(name for name, part in parts if part_overlaps(part, t['box'], 0.5)))
+        for name in touched:
             add(
                 'warning',
                 'TEXT_ON_SYMBOL',
                 f'{t["owner"]}.{t["field"]} 的文字压到 {name} 的符号',
-                '移动 AREA（文字起点 = AREA 水平中心 - FormatFactor），与图形留至少 3 个单位；'
+                '移动 AREA（文字起点 = AREA 水平中心 - FormatFactor），与图形留至少 2 个单位；'
                 '或用编辑操作 {"op": "place_text"} 自动摆放。',
                 t['box'][:2],
             )
@@ -210,16 +214,29 @@ def check_plan(plan, grid=10):
                     '把仿真控制移到图纸角落。',
                     t['box'][:2],
                 )
-        for seg in wires:
-            if hits_box(seg, t['box']):
+        crossed = next((seg for seg in wires if hits_box(seg, t['box'])), None)
+        if crossed:
+            add(
+                'warning',
+                'TEXT_ON_WIRE',
+                f'{t["owner"]}.{t["field"]} 的文字被导线穿过',
+                '文字放在导线旁的空白处，或用编辑操作 {"op": "place_text"} 自动摆放。',
+                t['box'][:2],
+            )
+        elif not touched:
+            # 排版规则：文字与导线、符号至少留 2 个单位（留 0.1 的取整余量）。
+            margin = TEXT_CLEARANCE - 0.1
+            grown = (t['box'][0] - margin, t['box'][1] - margin, t['box'][2] + margin, t['box'][3] + margin)
+            near = ['导线'] if any(hits_box(seg, grown) for seg in wires) else []
+            near += list(dict.fromkeys(name for name, part in parts if part_overlaps(part, t['box'], -margin)))
+            if near:
                 add(
                     'warning',
-                    'TEXT_ON_WIRE',
-                    f'{t["owner"]}.{t["field"]} 的文字被导线穿过',
-                    '文字放在导线旁的空白处，或用编辑操作 {"op": "place_text"} 自动摆放。',
+                    'TEXT_NEAR_LINE',
+                    f'{t["owner"]}.{t["field"]} 的文字贴着{"、".join(near)}，间距不到 {TEXT_CLEARANCE:g} 个单位',
+                    '文字与导线、符号至少留 2 个单位；可用编辑操作 {"op": "place_text"} 自动摆放。',
                     t['box'][:2],
                 )
-                break
     for clock in clocks:
         near = [name for name, box in symbols if gap(clock, box) < 20]
         near += [f'{t["owner"]}.{t["field"]}' for t in texts if gap(clock, t['box']) < 10]

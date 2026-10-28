@@ -151,8 +151,8 @@ TOOLS = [
         'description': 'Apply edit operations to a PSIM plan and re-check it. Operations: move {name|type, '
         'dx,dy|to} (wire ends on its ports follow and are re-squared around symbols), set {name,field,value}, '
         'move_text {name,field,dx,dy|area}, add_element, remove_element, add_wire {from,to}, remove_wire {at}, '
-        'shift_all {dx,dy}, place_text {names?} (re-places labels that overlap text, symbols or wires, using '
-        'the native text rule).',
+        'shift_all {dx,dy}, place_text {names?, all?} (re-places labels that overlap or touch text, '
+        'symbols or wires, using the native text rule; all: true first restores the standard positions).',
         'schema': _schema(
             {
                 'plan': PLAN,

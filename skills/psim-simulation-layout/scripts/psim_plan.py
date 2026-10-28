@@ -349,14 +349,14 @@ def apply_edits(plan, operations):
                 else:
                     _shift_element(element, dx, dy)
         elif action == 'place_text':
-            plan = place_text(plan, op.get('names'))
+            plan = place_text(plan, op.get('names'), reset=bool(op.get('all')))
             elements = plan['elements']
         else:
             raise ValueError(f'未知编辑操作：{action!r}')
     return plan
 
 
-TEXT_CODES = ('TEXT_OVERLAP', 'TEXT_ON_SYMBOL', 'TEXT_ON_WIRE')
+TEXT_CODES = ('TEXT_OVERLAP', 'TEXT_ON_SYMBOL', 'TEXT_ON_WIRE', 'TEXT_NEAR_LINE')
 LINE = 17  # 一行关联文字的 AREA 高度（FontSize -15）
 
 
@@ -409,16 +409,25 @@ def _text_candidates(element):
     ]
 
 
-def place_text(plan, names=None):
+def place_text(plan, names=None, reset=False):
     """自动摆放关联文字：对压字、压符号、压导线的元件逐个试候选位置，取问题最少的。
 
     已经没有文字问题的计划原样返回；只动 names 指定的元件（默认全部有关元件）。
+    reset 为真时先把这些元件的文字放到第一候选（横放在上方、竖放在右侧、探头名在右侧），让全图标注统一，再消除冲突。
     """
     plan = copy.deepcopy(plan)
+    wanted = set(names) if names else None
+    if reset:
+        for element in plan['elements']:
+            labels = element.get('textlinks', [])
+            if labels and (wanted is None or element.get('name') in wanted):
+                candidates = _text_candidates(element)
+                if candidates:
+                    for label, area in zip(labels, candidates[0]):
+                        label['AREA'] = area
     problems = _text_problems(plan)
     if not problems:
         return plan
-    wanted = set(names) if names else None
     for _ in range(2):
         spots = [tuple(f['at'][:2]) for f in problems if 'at' in f]
         for element in plan['elements']:
@@ -446,4 +455,26 @@ def place_text(plan, names=None):
                 problems = _text_problems(plan)
             if not problems:
                 return plan
+    if not reset:
+        # 逐个挪不开时（唯一的空位正被别的文字占着），先把问题附近的、再把全部有关文字放回标准位置重摆，
+        # 只在问题变少时采用。
+        spots = [tuple(f['at'][:2]) for f in problems if 'at' in f]
+        crowd = [
+            element['name']
+            for element in plan['elements']
+            if element.get('textlinks')
+            and (wanted is None or element.get('name') in wanted)
+            and any(
+                abs(b[0] - x) < 60 and abs(b[1] - y) < 60
+                for b in (text_box(element, label) for label in element['textlinks'])
+                for x, y in spots
+            )
+        ]
+        for group in ([crowd] if crowd else []) + [names]:
+            retry = place_text(plan, group, reset=True)
+            left = _text_problems(retry)
+            if len(left) < len(problems):
+                plan, problems = retry, left
+            if not problems:
+                break
     return plan

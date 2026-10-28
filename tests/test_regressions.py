@@ -133,6 +133,21 @@ class TopologyProtection(unittest.TestCase):
         self.assertEqual(psim_plan.port_nets(changed), psim_plan.port_nets(PSIM_PLAN))
 
 
+class SoftwareLocation(unittest.TestCase):
+    def test_quoted_environment_paths_are_accepted(self):
+        # 资源管理器“复制文件地址”得到带引号的路径，直接粘进环境变量也要能找到软件。
+        with tempfile.TemporaryDirectory() as folder:
+            psim = Path(folder, 'PSIM 2026')
+            (psim / 'Python/Samples').mkdir(parents=True)
+            (psim / 'PSIM2.dll').write_bytes(b'')
+            (psim / 'Python/Samples/Psim_Class.py').write_text('', encoding='utf-8')
+            ad = Path(folder, 'X2.EXE')
+            ad.write_bytes(b'')
+            with patch.dict(os.environ, {'PSIM_DIR': f' "{psim}" ', 'AD_EXE': f'"{ad}"'}):
+                self.assertEqual(native_psim.find_psim(), psim)
+                self.assertEqual(native_ad.find_ad(), ad)
+
+
 class ResultComparison(unittest.TestCase):
     def files(self, folder, candidate):
         reference, target = Path(folder, 'reference.csv'), Path(folder, 'candidate.csv')
@@ -244,9 +259,11 @@ class InstallerIntegrity(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(done.returncode, 0, done.stderr)
-            content = Path(folder, 'kit/build.bat').read_bytes().decode('utf-8')
-            self.assertIn('chcp 65001', content)
-            self.assertIn('测试电路.psimsch', content)
+            # 中文名不进批处理（纯 ASCII，避免代码页问题），由 kit.json 交给 Python。
+            Path(folder, 'kit/build.bat').read_bytes().decode('ascii')
+            kit = json.loads(Path(folder, 'kit/kit.json').read_text(encoding='utf-8'))
+            self.assertEqual(kit, {'name': '测试电路'})
+            self.assertIn('测试电路.psimsch', Path(folder, 'kit/README.txt').read_text(encoding='utf-8-sig'))
 
     def test_script_only_change_invalidates_both_installers(self):
         with tempfile.TemporaryDirectory() as folder:

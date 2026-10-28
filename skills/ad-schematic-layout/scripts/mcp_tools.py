@@ -149,8 +149,9 @@ TOOLS = [
         'description': 'Apply edit operations to a plan and re-check it. Operations: move {ref,dx,dy|to}, '
         'set_value {ref,value}, move_text {ref,field:designator|comment,at}, rename {ref,to}, add_part, '
         'remove_part, add_wire {points}, remove_wire {index|touching}, add_label, remove_label, '
-        'add_power_port, remove_power_port, set_canvas, shift_all, fit_canvas {margin}, place_text {refs?} '
-        '(moves designators/comments that overlap text or graphics to the first collision-free spot). Wires '
+        'add_power_port, remove_power_port, set_canvas, shift_all, fit_canvas {margin}, place_text {refs?, all?} '
+        '(moves designators/comments that overlap or touch text or graphics to the first collision-free spot; '
+        'all: true first restores the standard positions). Wires '
         'attached to moved pins are re-routed orthogonally.',
         'schema': _schema(
             {

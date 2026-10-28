@@ -45,7 +45,7 @@ PSIM 当前 RC 基准 CSV 与交接任务返回 CSV 的 SHA-256 相同：
 python -m unittest discover -s tests -v
 ```
 
-无需 AD 或 PSIM。CI 配置 Windows、macOS、Linux 与 Python 3.10/3.13；1.2.0 在本机 Windows/Python 3.12 运行 84 项测试，1.3.0 的修改在 Linux 上用 Python 3.10 和 3.13 运行 103 项（Python 3.10 没有 Pillow，跳过仿原生出图等 6 项）。覆盖：
+无需 AD 或 PSIM。CI 配置 Windows、macOS、Linux 与 Python 3.10/3.13；1.2.0 在本机 Windows/Python 3.12 运行 84 项测试，1.3.0 的修改在 Linux 上用 Python 3.10 和 3.13 运行 121 项（3.13 装 Pillow 13 和 resvg-py 时全部运行；Python 3.10 没有 Pillow 和 resvg-py，跳过仿原生出图等 6 项）。覆盖：
 
 - 排版预检：两项示例 0 error、0 warning；悬空线、浮空标号、离栅格热端、隐式短接、不可编码字符等结构错误；文字重叠、穿件导线、四向连接、浮动标题、稀疏图面等版面问题；PSIM 的文字压符号、导线穿符号、仿真控制位置、参数写法。
 - SchDoc 读写：标准库读写复合文档；二进制引脚记录解码；示例生成文件的 SHA-256 固定（跨系统字节一致）；导入后重建的记录完全相同；各缩放比例下无源件热端在栅格上。
@@ -53,14 +53,14 @@ python -m unittest discover -s tests -v
 - 便携渲染：Pillow、resvg PNG 和 SVG；显式字体配置、PNG 来源信息与同一输入重复输出；后端比较见 [预览评测](preview-backends.md)。
 - EMF 审查：映射模式换算、文字被线穿过、圆形压字、单个字符不误报。
 - 波形测量：非均匀采样积分、RMS、V/I 乘积积分、储能、门极频率、无效 CSV。
-- MCP 服务器协议、两个安装器、交付目录分类、Windows 构建包。
+- MCP 服务器协议（含 `--with` 相对路径）、两个安装器、交付目录分类、Windows 构建包；`PSIM_DIR`、`AD_EXE` 带引号时也能找到软件。
 - README 中的命令流程，包括输出目录不存在时自动创建。
 - 输入输出同路径保护、报告不得覆盖已有文件或本次生成的计划/检查文件、附加参数保留、模型关联拒绝静默丢失、GBK/UTF-8 文字解码。
 - 交接任务自包含、显式依赖、原生结果接收、文件被改动/请求错配/失败结果/路径越界拒收；计划目录外的依赖被拒绝；准备失败后目录可重用。
 - AD 预检草图输出 SVG（只用标准库）和 PNG（resvg-py 或 Pillow）。
 - 仿原生出图：AD、PSIM 的 RC 示例与仓库里的 Windows 原生导出逐像素比较，图像尺寸相同，线条和文字像素至少 95% 在 1 像素内对齐（实测 AD 97.8%、PSIM 97.1%，不计白底）；方法与前后对比见 [预览后端](preview-backends.md)。
 - PSIM 文字定位：按"起点 = AREA 水平中心 - FormatFactor、字号 6/7·|FontSize|"估算的 7 段文字，与原生导出实测位置相差不超过 2 个单位；文字离电源太近时报出。
-- 文字重叠：两项预检把文字互相重叠列为 error；`place_text` 把故意弄乱的 AD、PSIM 示例修到 0 个文字问题，没有问题的计划不改动。
+- 文字重叠：两项预检把文字互相重叠列为 error，文字离线条不到 2 个单位报 `TEXT_NEAR_LINE`；`place_text` 把故意弄乱的 AD、PSIM 示例修到 0 个文字问题，没有问题的计划不改动，`all` 把挪开的文字放回标准位置。另在测试之外做过随机压力试验：AD 954 个随机弄乱的版面（其中 478 个器件间距只有 80–100、文字偏移达 ±50）、PSIM 1181 个（其中 590 个元件间距只有 70–90、文字偏移达 ±60），`place_text` 全部修到 0 个文字问题；`all` 放回标准位置后 AD 120 个、PSIM 200 个也都没有文字问题；行距只有 20 的 AD 梯形网络也修到 0 个文字问题。
 - 离线预仿真：RC 阶跃与解析解最大偏差小于 1e-4 V（实测约 3e-5 V），RL 阶跃电流、RC 正弦稳态幅值与解析值一致；遇到开关等元件拒绝；步长过粗报出。
 - 离线预测：AD 示例预测 0 个编译 error、4 条缺少封装的 warning，与 Windows 实测一致；PSIM 示例预检、预览和预仿真都通过；离线预仿真与原生波形的对照记录。
 - 交付：`preflight/` 目录和 presim 文件归档，不进客户目录。
@@ -94,3 +94,5 @@ MCP 1.2.0 已在 Windows 上完成 29 工具枚举（1.3.0 增加到 32 个，�
 | 构建包最后自动用 PSIM 打开模型；`open` 命令 | 双击 `build.bat`；`native_ad.py open X.PrjPcb` | PSIM、AD 窗口打开且已载入模型；设置 `PSIM_NO_OPEN` 时不打开 |
 | 交接任务的 `forecast` 对照 | `handoff` → `run.bat` → `receive` | AD 预计与实际 warning 数一致；PSIM 离线预仿真与原生波形的最大偏差 |
 | macOS 上用真 Times New Roman/Arial 的仿原生出图 | `render` 后与原生导出比较 | 尺寸相同，线条和文字对齐率不低于 Linux |
+| `build.bat` 改走 `build` 命令 | 中文名称的构建包双击两次；再故意让一步失败 | 两次都通过且第二次沿用模型；失败时窗口停住、`build-report.json` 记下原因、模型仍被打开 |
+| `run.bat` 先查依赖并可重跑 | 未装 Pillow 时双击；装好后再双击 | 启动软件前停下并提示安装命令；第二次通过，上次结果留在 `native-results.failed-1` |

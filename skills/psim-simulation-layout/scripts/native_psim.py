@@ -60,7 +60,8 @@ def _valid(directory):
 
 def find_psim(explicit=None):
     """查找 PSIM 安装目录：参数、PSIM_DIR 环境变量、常见安装位置。"""
-    for candidate in (explicit, os.environ.get('PSIM_DIR')):
+    # 资源管理器的“复制文件地址”和 set X="..." 都会把引号带进环境变量。
+    for candidate in (explicit, os.environ.get('PSIM_DIR', '').strip().strip('"')):
         if candidate and _valid(Path(candidate)):
             return Path(candidate)
     if os.name != 'nt':
@@ -88,11 +89,19 @@ def initialize(explicit=None):
         raise RuntimeError('此操作需要 Windows 与 PSIM；可用 --psim-dir 或环境变量 PSIM_DIR 指定安装目录')
     directory = directory.resolve()
     sys.path.insert(0, str(directory / 'Python' / 'Samples'))
-    from Psim_Class import PSIM
+    try:
+        from Psim_Class import PSIM
 
-    psim = PSIM(str(directory))
+        psim = PSIM(str(directory))
+    except OSError as error:
+        # 32 位或 ARM64 的 Python 载入 x64 的 PSIM2.dll 会报 WinError 193。
+        bits = struct.calcsize('P') * 8
+        raise RuntimeError(
+            f'载入 PSIM 原生接口失败（当前 Python：{platform.machine() or "未知架构"}、{bits} 位）：{error}；'
+            '请用与 PSIM 相同架构的 Python（通常是 x64）'
+        ) from error
     if not psim or not psim.IsValid():
-        raise RuntimeError('PSIM 原生接口初始化失败')
+        raise RuntimeError('PSIM 原生接口初始化失败；确认 PSIM 已激活许可并能正常启动')
     return psim
 
 
@@ -447,24 +456,24 @@ def export(psim, source, target, dpi=120):
 # ------------------------------------------------------------- 跨系统功能 ----
 
 BUILD_BAT = r"""@echo off
-rem Run on a Windows PC with PSIM: PSIM writes the native model, solves it and exports the drawing.
-chcp 65001 >nul
+rem Run on a Windows PC with PSIM: PSIM writes the native model, solves it, exports the drawing and opens it.
+rem Pure ASCII on purpose; the model name is read from kit.json.
 setlocal
 cd /d "%~dp0"
 set "PY=py -3"
 %PY% --version >nul 2>&1 || set "PY=python"
-set "ARGS="
-if defined PSIM_DIR set ARGS=--psim-dir "%PSIM_DIR%"
-%PY% tools\native_psim.py %ARGS% create plan.json "{name}.psimsch" || goto :fail
-%PY% tools\native_psim.py %ARGS% simulate "{name}.psimsch" result || goto :fail
-%PY% tools\native_psim.py %ARGS% export "{name}.psimsch" drawing\{name}.emf || goto :fail
-echo Done: {name}.psimsch, result\, drawing\
-rem Open the finished model in PSIM unless PSIM_NO_OPEN is set; failing to open does not fail the build.
-if defined PSIM_NO_OPEN exit /b 0
-%PY% tools\native_psim.py %ARGS% open "{name}.psimsch" >nul || echo Open {name}.psimsch in PSIM manually.
+%PY% -c "import sys; sys.exit(sys.version_info < (3, 10))" >nul 2>&1 || goto :nopython
+rem PSIM_DIR is read by Python itself; passing it here would break on a trailing backslash.
+%PY% tools\native_psim.py build . || goto :fail
 exit /b 0
+:nopython
+echo Python 3.10 or newer was not found. Install 64-bit Python from https://www.python.org/downloads/windows/
+echo and tick "Add python.exe to PATH", then double-click build.bat again.
+goto :stop
 :fail
-echo Build failed. Check the message above.
+echo Build failed. Read the message above; details are in build-report.json.
+:stop
+if not defined PSIM_NO_PAUSE pause
 exit /b 1
 """
 
@@ -475,15 +484,77 @@ PACKAGE_README = """{name} - PSIM 构建包 / PSIM build kit
 2. 原生求解，结果写入 result\\（SMV 与 CSV）；
 3. 原生出图，写入 drawing\\（EMF、PNG）；
 4. 用 PSIM 打开做好的 {name}.psimsch（设置环境变量 PSIM_NO_OPEN 可跳过）。
-找不到 PSIM 时先设置环境变量 PSIM_DIR 为安装目录。原生 PNG 需要 Python 3.11+ 和 Pillow 13。
+每一步的结果写在 build-report.json；失败时窗口停住显示原因。再次双击会沿用已有的 {name}.psimsch
+（不覆盖在 PSIM 里改过的模型），重新求解和出图；要按 plan.json 重新建模，先删掉 {name}.psimsch。
+需要 64 位 Python 3.10+；原生 PNG 另需 Python 3.11+ 和 Pillow 13。找不到 PSIM 时先设置环境变量 PSIM_DIR 为安装目录。
 psimsch 是 PSIM 的私有格式，只能由 PSIM 自己写出，所以这一步必须在装有 PSIM 的 Windows 上完成。
 
 On a Windows PC with PSIM, double-click build.bat. It writes {name}.psimsch through PSIM's own API,
 runs the solver (result\\), exports the drawing (drawing\\) and opens the model in PSIM (set PSIM_NO_OPEN to
-skip). Native PNG needs Python 3.11+ and Pillow 13. Set PSIM_DIR if PSIM is not found.
+skip). Every step is recorded in build-report.json and the window stays open on failure. Running it again
+reuses the existing {name}.psimsch and redoes the solve and drawing; delete the model to rebuild it from plan.json.
+Needs 64-bit Python 3.10+; native PNG also needs Python 3.11+ and Pillow 13. Set PSIM_DIR if PSIM is not found.
 
 preview.render.png 是仿原生预览，不是 PSIM 原生导出。
 """
+KIT = 'kit.json'
+
+
+def build(folder, psim_dir=None, psim=None, open_after=None):
+    """构建包入口（build.bat 调用）：建模 → 求解 → 出图 → 用 PSIM 打开，每步写入 build-report.json。
+
+    已有模型时沿用，不覆盖用户在 PSIM 里改过的文件；求解和出图只替换本命令自己写出的文件。
+    """
+    folder = Path(folder).resolve()
+    name = read_json(folder / KIT)['name']
+    if not isinstance(name, str) or not re.fullmatch(r'[\w-]+', name):
+        raise ValueError('kit.json 里的名称无效')
+    model, result, drawing = folder / f'{name}.psimsch', folder / 'result', folder / 'drawing'
+    report = {'model': str(model), 'passed': False, 'steps': {}}
+    if open_after is None:
+        open_after = not os.environ.get('PSIM_NO_OPEN')
+
+    def step(number, label):
+        print(f'[{number}/4] {label}', file=sys.stderr, flush=True)
+
+    try:
+        plan = read_json(folder / 'plan.json')
+        layout = precheck(plan)
+        psim = psim or initialize(psim_dir)
+        step(1, f'建模 {model.name}')
+        if model.exists():
+            report['steps']['create'] = {
+                'status': 'reused',
+                'note': f'沿用已有模型；要按 plan.json 重建，先删除 {model.name}',
+            }
+        else:
+            create(psim, plan, model)
+            report['steps']['create'] = {'status': 'created', 'layout_check': layout['summary']}
+        step(2, '原生求解')
+        for old in (result / 'result.smv', result / 'native.csv'):
+            old.unlink(missing_ok=True)
+        report['steps']['simulate'] = simulate(psim, model, result, {})
+        step(3, '原生出图')
+        for old in (drawing / f'{name}.emf', drawing / f'{name}.png', drawing / f'{name}-compact.png'):
+            old.unlink(missing_ok=True)
+        report['steps']['export'] = export(psim, model, drawing / f'{name}.emf')
+        report['passed'] = report['steps']['export']['text_review'].get('passed', False)
+        if not report['passed']:
+            report['note'] = (
+                '原生出图的文字审查没通过，见 steps.export.text_review；模型已建好，可在 PSIM 里调整后重新出图'
+            )
+    except Exception as error:
+        report['error'] = f'{type(error).__name__}: {error}'
+        raise
+    finally:
+        if open_after and model.is_file():
+            step(4, '用 PSIM 打开模型')
+            try:
+                report['steps']['open'] = open_model(model, psim_dir)
+            except (OSError, RuntimeError) as error:
+                report['steps']['open'] = {'status': 'failed', 'note': f'请手动用 PSIM 打开 {model.name}：{error}'}
+        write_json(folder / 'build-report.json', report)
+    return report
 
 
 def package(plan_path, folder, name=None):
@@ -499,12 +570,13 @@ def package(plan_path, folder, name=None):
         raise FileExistsError(f'目录已存在且非空：{folder}')
     (folder / 'tools').mkdir(parents=True, exist_ok=True)
     write_json(folder / 'plan.json', plan)
+    write_json(folder / KIT, {'name': name})
     for tool in PACKAGE_TOOLS:
         shutil.copy2(HERE / tool, folder / 'tools' / tool)
     for filename in ('LICENSE', 'THIRD_PARTY_NOTICES.md'):
         if (HERE.parent / filename).is_file():
             shutil.copy2(HERE.parent / filename, folder / filename)
-    (folder / 'build.bat').write_bytes(BUILD_BAT.replace('{name}', name).replace('\n', '\r\n').encode('utf-8'))
+    (folder / 'build.bat').write_bytes(BUILD_BAT.replace('\n', '\r\n').encode('ascii'))
     (folder / 'README.txt').write_bytes(PACKAGE_README.format(name=name).replace('\n', '\r\n').encode('utf-8-sig'))
     try:
         from render import render_plan
@@ -661,6 +733,9 @@ def main():
     item.add_argument('plan', type=Path)
     item.add_argument('folder', type=Path)
     item.add_argument('--name')
+    item = sub.add_parser('build', help='Windows 构建包入口：建模、求解、出图并用 PSIM 打开（build.bat 调用）')
+    item.add_argument('folder', type=Path)
+    item.add_argument('--no-open', action='store_true', help='不打开 PSIM（也可设置 PSIM_NO_OPEN）')
     item = sub.add_parser('open', help='Windows：用 PSIM 打开 psimsch')
     item.add_argument('source', type=Path)
     item = sub.add_parser('screenshot', help='有 PSIM 时截取窗口，否则便携渲染')
@@ -755,6 +830,9 @@ def main():
             data = presimulate(read_json(args.plan), args.csv)
         elif command == 'package':
             data = package(args.plan, args.folder, args.name)
+        elif command == 'build':
+            data = build(args.folder, args.psim_dir, open_after=False if args.no_open else None)
+            failed = not data['passed']
         elif command == 'open':
             data = open_model(args.source, args.psim_dir)
         elif command == 'screenshot':

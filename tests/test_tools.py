@@ -151,7 +151,9 @@ class PsimCommands(unittest.TestCase):
             bat = (kit / 'build.bat').read_bytes()
             bat.decode('ascii')
             self.assertNotIn(b'\n', bat.replace(b'\r\n', b''))
-            self.assertIn(b'create plan.json "RC_Filter.psimsch"', bat)
+            self.assertIn(b'tools\\native_psim.py build . || goto :fail', bat)
+            self.assertIn(b'pause', bat)
+            self.assertEqual(json.loads((kit / 'kit.json').read_text(encoding='utf-8')), {'name': 'RC_Filter'})
             code, check, error = run(kit / 'tools' / 'native_psim.py', 'check', 'plan.json', cwd=kit)
             self.assertEqual((code, check['summary']['errors']), (0, 0), error)
             code, _, error = run(kit / 'tools' / 'native_psim.py', 'create', 'plan.json', 'x.psimsch', cwd=kit)
@@ -245,6 +247,26 @@ class McpServer(unittest.TestCase):
         self.assertEqual(replies[5]['error']['code'], -32601)
         self.assertFalse(replies[6]['result']['isError'])
         self.assertNotIn(None, replies)
+
+    def test_relative_with_paths_from_the_docs_work_from_the_skill_folder(self):
+        # commands.md 的写法：在技能目录下运行，--with 相对 scripts 目录写成 ../../另一个技能/scripts。
+        for skill, other in ((AD, 'psim-simulation-layout'), (PSIM, 'ad-schematic-layout')):
+            with self.subTest(skill=skill.parent.name):
+                done = subprocess.run(
+                    [sys.executable, 'scripts/mcp_server.py', '--with', f'../../{other}/scripts', '--list'],
+                    capture_output=True,
+                    cwd=skill.parent,
+                    check=False,
+                )
+                self.assertEqual(done.returncode, 0, done.stderr.decode())
+                self.assertEqual(len(json.loads(done.stdout)), 32)
+        done = subprocess.run(
+            [sys.executable, str(AD / 'mcp_server.py'), '--with', 'no-such-folder', '--list'],
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(done.returncode, 2)
+        self.assertIn('mcp_tools.py', done.stderr.decode('utf-8'))
 
 
 class Installers(unittest.TestCase):

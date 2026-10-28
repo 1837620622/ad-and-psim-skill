@@ -29,7 +29,7 @@ psimsch 是 PSIM 的私有二进制格式。macOS/Linux 用 `handoff` 准备可�
 2. **读排版规则。** 每次排图前读 [排版硬规则](references/drafting-rules.md)。
 3. **写计划并预检。** 格式和命令见 [命令与计划格式](references/commands.md)。`check` 修到 0 error，看仿原生渲染。关联文字的实际起点 = AREA 水平中心 - FormatFactor，预检按这个规则判断压字压线；文字重叠是 error，可用编辑操作 `place_text` 自动摆放。
 4. **离线预测。** `preflight` 给出仿原生预览，并对线性电路做离线预仿真（与 PSIM 同类算法），先确认参数、拓扑、步长和波形量级；`ready_for_windows` 为 true 再上 Windows。离线预仿真不是 PSIM 结果，不能交付。
-5. **建模。** 有 PSIM 就直接 `create`；没有就 `package`，在 Windows 上双击 `build.bat`：PSIM 写出 psimsch、求解、出图，最后自动打开模型。psimsch 是 PSIM 的私有格式，只能由 PSIM 写出。复杂元件先用小电路校准端口和参数，见 [建模与元件校准](references/modeling.md)。
+5. **建模。** 有 PSIM 就直接 `create`；没有就 `package`，在 Windows 上双击 `build.bat`：PSIM 写出 psimsch、求解、出图，最后自动打开模型；失败时看 `build-report.json`，改好后再双击，已有模型会沿用。psimsch 是 PSIM 的私有格式，只能由 PSIM 写出。复杂元件先用小电路校准端口和参数，见 [建模与元件校准](references/modeling.md)。
 6. **分阶段求解。** 先看启动和明显异常，再确认稳态，然后做输入/负载扫描和阶跃。时间步长与稳态见 [求解与时间基准](references/solver-and-timebase.md)。
 7. **核验物理量。** 频率从实际波形测；效率只在稳态、方向一致、边界合适时才叫效率。见 [物理量与测量](references/physics-and-measurement.md)。
 8. **出图与交付。** `export` 的 `text_review` 必须通过，再看全图和局部；`deliver` 生成客户目录（模型和结果）和归档目录，不打压缩包。见 [图纸、波形与交付](references/delivery.md)。

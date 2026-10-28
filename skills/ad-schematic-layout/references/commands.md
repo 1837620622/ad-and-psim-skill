@@ -78,7 +78,7 @@ AD 程序按顺序查找：`--ad-exe`、环境变量 `AD_EXE`、Windows 卸载�
 | `add_label` / `remove_label` | `name`、`at` | |
 | `add_power_port` / `remove_power_port` | `name`、`at`、`ground` | |
 | `set_canvas` / `shift_all` / `fit_canvas` | `canvas` / `dx`、`dy` / `margin` | `fit_canvas` 按内容缩放画布并居中 |
-| `place_text` | 可选 `refs` | 自动摆放位号和参数：对压字、压线、落进别的器件框的文字依次试上方叠放、下方叠放、上下分开、右侧、左侧，取第一个没有问题的位置；没有文字问题时不改动 |
+| `place_text` | 可选 `refs`、`all` | 自动摆放位号和参数：对压字、压线、贴线、出图框、落进别的器件框的文字依次试上方叠放、下方叠放、上下分开、右侧、左侧，取第一个没有问题的位置；逐个挪不开时把附近的文字一起放回标准位置再摆，只在问题变少时采用；没有文字问题时不改动。`"all": true` 先把这些器件的文字放回生成器的标准位置，再消除冲突 |
 | `set_pin_map` | `pin_map` | 改预期连接 |
 
 `import` 生成的计划带 `pin_map`，记录导入时的连接；只改排版时，预检会确认连接没有变。导入只支持本生成器能重建的图元，带库图形或多部件的器件会列在 `unsupported` 里。

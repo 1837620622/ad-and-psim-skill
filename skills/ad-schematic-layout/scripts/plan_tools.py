@@ -350,13 +350,13 @@ def apply_edits(plan, operations):
         elif kind == 'set_pin_map':
             plan['pin_map'] = dict(op['pin_map'])
         elif kind == 'place_text':
-            plan = place_text(plan, op.get('refs'))
+            plan = place_text(plan, op.get('refs'), reset=bool(op.get('all')))
         else:
             raise ValueError(f'未知编辑操作：{kind!r}')
     return plan
 
 
-TEXT_CODES = ('TEXT_OVERLAP', 'TEXT_ON_GRAPHICS', 'TEXT_ON_PART')
+TEXT_CODES = ('TEXT_OVERLAP', 'TEXT_ON_GRAPHICS', 'TEXT_NEAR_LINE', 'TEXT_ON_PART')
 
 
 def _text_problems(plan):
@@ -366,7 +366,14 @@ def _text_problems(plan):
 
     sheet = build(plan)
     result, model, texts = check_records(sheet.records, plan.get('pin_map'), grid=plan.get('grid', 10))
-    return [f for f in result['findings'] if f['code'] in TEXT_CODES], model, texts
+    problems = [f for f in result['findings'] if f['code'] in TEXT_CODES]
+    # 预检的 OUTSIDE_BORDER 只报第一处图元；位号和参数出图框要逐个算作文字问题，才会被挪回框内。
+    x1, y1, x2, y2 = result['metrics']['border']
+    for t in texts:
+        cell = t['cell']
+        if t['kind'] in ('designator', 'comment') and (cell[0] < x1 or cell[1] < y1 or cell[2] > x2 or cell[3] > y2):
+            problems.append({'severity': 'error', 'code': 'OUTSIDE_BORDER', 'at': t['ink'][:2]})
+    return problems, model, texts
 
 
 def _owner(text):
@@ -414,16 +421,22 @@ def _label_candidates(part, texts, model):
     return result
 
 
-def place_text(plan, refs=None):
+def place_text(plan, refs=None, reset=False):
     """自动摆放位号和参数：对压字、压线、落进别的器件框的文字逐个试候选位置，取问题最少的。
 
     已经没有文字问题的计划原样返回；只动 refs 指定的器件（默认全部有关器件）。
+    reset 为真时先把这些器件的文字放回生成器的标准位置，让全图标注统一，再消除冲突。
     """
     plan = copy.deepcopy(plan)
+    wanted = set(refs) if refs else None
+    if reset:
+        for part in plan.get('parts', []):
+            if wanted is None or part.get('ref') in wanted:
+                part.pop('designator_at', None)
+                part.pop('comment_at', None)
     problems, model, texts = _text_problems(plan)
     if not problems:
         return plan
-    wanted = set(refs) if refs else None
     for _ in range(2):
         spots = [tuple(f['at'][:2]) for f in problems if 'at' in f]
         involved = []
@@ -447,6 +460,26 @@ def place_text(plan, refs=None):
                 problems, model, texts = _text_problems(plan)
             if not problems:
                 return plan
+    if not reset:
+        # 逐个挪不开时（唯一的空位正被别的文字占着），先把问题附近的、再把全部有关文字放回标准位置重摆，
+        # 只在问题变少时采用。
+        spots = [tuple(f['at'][:2]) for f in problems if 'at' in f]
+        crowd = sorted(
+            {
+                _owner(t)
+                for t in texts
+                if _owner(t)
+                and (wanted is None or _owner(t) in wanted)
+                and any(abs(t['ink'][0] - x) < 50 and abs(t['ink'][1] - y) < 50 for x, y in spots)
+            }
+        )
+        for group in ([crowd] if crowd else []) + [refs]:
+            retry = place_text(plan, group, reset=True)
+            left = _text_problems(retry)[0]
+            if len(left) < len(problems):
+                plan, problems = retry, left
+            if not problems:
+                break
     return plan
 
 

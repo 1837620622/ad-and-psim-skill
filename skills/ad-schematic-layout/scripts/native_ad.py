@@ -248,7 +248,8 @@ def preflight(plan, folder):
 
 def find_ad(explicit=None):
     """查找 AD 主程序：参数、AD_EXE 环境变量、常见安装目录。"""
-    for candidate in (explicit, os.environ.get('AD_EXE')):
+    # 资源管理器的“复制文件地址”和 set X="..." 都会把引号带进环境变量。
+    for candidate in (explicit, os.environ.get('AD_EXE', '').strip().strip('"')):
         if candidate and Path(candidate).is_file():
             return Path(candidate)
     if os.name != 'nt':

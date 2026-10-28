@@ -13,6 +13,7 @@
 | `presim PLAN OUT.csv` | 离线预仿真 R、L、C、VDC、VSIN、VP 组成的线性电路（节点分析 + 固定步长梯形积分，零初始状态），另报步长和时长检查；其他元件直接拒绝 | 任何 |
 | `render PLAN OUT [--scale N] [--renderer R]` | 计划渲染为 PNG/SVG；PNG 默认仿 Windows 原生出图 | 任何 |
 | `package PLAN DIR [--name N]` | 生成 Windows 构建包 | 任何 |
+| `build KIT [--no-open]` | 构建包入口（`build.bat` 调用）：建模、求解、出图，再用 PSIM 打开；每步写入 `build-report.json` | Windows + PSIM |
 | `screenshot SOURCE OUT` | 有 PSIM 且给的是 psimsch：打开软件截窗口；否则渲染计划 | 任何 |
 | `open PSIMSCH` | 用 PSIM 打开模型（不等待窗口关闭）；构建包最后会自动调用 | Windows + PSIM |
 | `deliver WORK OUT [--name N] [--include 通配符]` | 生成客户目录与归档目录 | 任何 |
@@ -76,7 +77,7 @@ PSIM 安装目录按顺序查找：`--psim-dir`、环境变量 `PSIM_DIR`、Wind
 | `add_element` / `remove_element` | `element` / `name` | |
 | `add_wire` / `remove_wire` | `from`、`to` / `at` | `remove_wire` 删除端点在该点的导线 |
 | `shift_all` | `dx`、`dy` | 整体平移 |
-| `place_text` | 可选 `names` | 自动摆放关联文字：横放元件放上方或下方，竖放元件放右侧或左侧，探头名放探头旁；按原生定位规则（起点 = AREA 水平中心 - FormatFactor）计算 AREA，取第一个不压字、不压符号、不压线的位置；没有文字问题时不改动 |
+| `place_text` | 可选 `names`、`all` | 自动摆放关联文字：横放元件放上方或下方，竖放元件放右侧或左侧，探头名放探头旁；按原生定位规则（起点 = AREA 水平中心 - FormatFactor）计算 AREA，取第一个不压字、不压符号、不压线、不贴线的位置；逐个挪不开时把附近的文字一起放回标准位置再摆，只在问题变少时采用；没有文字问题时不改动。`"all": true` 先把文字放回标准位置（横放在上、竖放在右），再消除冲突 |
 
 移动元件时保留共用节点上的探头和其他端口；移动前后比较已知端口的同网伙伴，发生意外断接或短接时拒绝保存。未标定器件只知道首端口，仍需原生核验。
 
@@ -86,16 +87,20 @@ PSIM 安装目录按顺序查找：`--psim-dir`、环境变量 `PSIM_DIR`、Wind
 
 ```text
 kit/
-├── build.bat            # 双击：create → simulate → export
+├── build.bat            # 双击：建模 → 求解 → 出图 → 打开（纯 ASCII）
+├── kit.json             # 模型名称（可含中文）
 ├── plan.json
 ├── tools/               # 自包含的 Python 执行工具
 ├── README.txt
 └── preview.render.png   # 仿原生预览（有 Pillow 时；否则 resvg-py 平滑渲染）
 ```
 
-在装有 PSIM、Python 3.11+ 和 Pillow 13 的 Windows 电脑上双击 `build.bat`，得到 `名称.psimsch`、`result\`（SMV、CSV）和 `drawing\`（EMF、PNG），最后自动用 PSIM 打开模型（设置 `PSIM_NO_OPEN` 跳过）。找不到 PSIM 时先设置 `PSIM_DIR`。psimsch 是 PSIM 的私有格式，第三方工具也要靠 PSIM 导出网表才能读，所以只能在 Windows 上由 PSIM 自己写出。
+在装有 PSIM 和 64 位 Python 3.10+ 的 Windows 电脑上双击 `build.bat`（原生 PNG 另需 Python 3.11+ 和 Pillow 13），得到 `名称.psimsch`、`result\`（SMV、CSV）和 `drawing\`（EMF、PNG），最后自动用 PSIM 打开模型（设置 `PSIM_NO_OPEN` 跳过）。找不到 PSIM 时先设置 `PSIM_DIR`。psimsch 是 PSIM 的私有格式，第三方工具也要靠 PSIM 导出网表才能读，所以只能在 Windows 上由 PSIM 自己写出。
 
-名称支持中文，批处理使用 UTF-8。原生文字检查失败时整个构建返回失败。需要回传校验、与准备端一致的原生预览及请求对应关系时，改用 [handoff / receive](handoff.md)。
+- 每一步的结果写入 `build-report.json`；失败时窗口停住显示原因（设置 `PSIM_NO_PAUSE` 不停）。没找到 Python 时提示下载地址。
+- 再次双击会沿用已有的 `名称.psimsch`，不覆盖在 PSIM 里改过的模型，只重新求解和出图；要按 `plan.json` 重新建模，先删掉模型。
+- 模型建好后即使求解或出图失败也会打开 PSIM，方便直接查看。
+- 名称支持中文：批处理只含 ASCII，名称经 `kit.json` 交给 Python，不受控制台代码页影响。原生文字检查失败时整个构建返回失败。需要回传校验、与准备端一致的原生预览及请求对应关系时，改用 [handoff / receive](handoff.md)。
 
 ## 复杂模型与已有图
 
