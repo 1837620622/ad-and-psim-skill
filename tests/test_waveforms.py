@@ -53,7 +53,7 @@ def read_xlsx(path):
 
 class Workbook(unittest.TestCase):
     def setUp(self):
-        self.folder = Path(tempfile.mkdtemp())
+        self.folder = Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(lambda: __import__('shutil').rmtree(self.folder, ignore_errors=True))
         self.rows = [[i * 1e-6, 0.5 * i, 10.0, -i / 3] for i in range(50)]
         self.csv = write_csv(self.folder / 'native.csv', ['Time', 'Vout', 'Vin', '电流'], self.rows)
@@ -109,7 +109,7 @@ class Workbook(unittest.TestCase):
 
 class Envelope(unittest.TestCase):
     def test_single_sample_spike_survives_and_ticks_read_cleanly(self):
-        folder = Path(tempfile.mkdtemp())
+        folder = Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(lambda: __import__('shutil').rmtree(folder, ignore_errors=True))
         rows = [[i * 1e-7, 5.0 + (30.0 if i == 77_777 else 0.0)] for i in range(200_000)]
         source = write_csv(folder / 'native.csv', ['Time', 'I(L1)'], rows)

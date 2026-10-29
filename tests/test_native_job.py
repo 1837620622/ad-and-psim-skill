@@ -324,7 +324,7 @@ class NativeSimulate(unittest.TestCase):
 
     def test_simulate_writes_curves_and_workbook_next_to_the_csv(self):
         psim = load_native_psim()
-        folder = Path(tempfile.mkdtemp())
+        folder = Path(tempfile.mkdtemp()).resolve()  # macOS 的 /var 是 /private/var 的链接
         self.addCleanup(lambda: __import__('shutil').rmtree(folder, ignore_errors=True))
         model = folder / 'model.psimsch'
         model.write_bytes(b'native')
