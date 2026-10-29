@@ -224,7 +224,8 @@ TOOLS = [
     },
     {
         'name': 'psim_simulate',
-        'description': 'Windows + PSIM: run the native solver, save result.smv and native.csv.',
+        'description': 'Windows + PSIM: run the native solver, save result.smv and native.csv, plus '
+        'waveforms.png curves and waveforms.xlsx drawn from that CSV.',
         'schema': _schema(
             {'source': PATH, 'folder': PATH, 'parameters': {'type': 'string', 'description': '可选的求解参数 JSON'}},
             ['source', 'folder'],
@@ -272,15 +273,48 @@ TOOLS = [
         'args': _waveform,
     },
     {
+        'name': 'psim_waveforms',
+        'description': 'Any OS: turn a waveform CSV into deliverable curves and a spreadsheet: <name>.png (one '
+        'panel per signal, shared time axis, per-pixel min-max envelope so spikes survive; SVG without Pillow) and '
+        '<name>.xlsx (all samples plus a statistics sheet). Drawn from the data, not a SIMVIEW screenshot. '
+        'psim_simulate already writes waveforms.png/.xlsx next to native.csv.',
+        'schema': _schema(
+            {
+                'csv': PATH,
+                'folder': PATH,
+                'name': {'type': 'string'},
+                'signals': {'type': 'array', 'items': {'type': 'string'}},
+                'start': {'type': 'number'},
+                'end': {'type': 'number'},
+                'svg': {'type': 'boolean'},
+            },
+            ['csv', 'folder'],
+        ),
+        'args': lambda a, m: [
+            'waveforms',
+            a['csv'],
+            a['folder'],
+            *_optional(a, '--name', 'name'),
+            *_repeat(a, '--signal', 'signals'),
+            *_optional(a, '--start', 'start'),
+            *_optional(a, '--end', 'end'),
+            *(['--svg'] if a.get('svg') else []),
+        ],
+    },
+    {
         'name': 'psim_deliver',
-        'description': 'Build the customer folder (psimsch, SMV/CSV results, drawings; no zip) and a separate '
-        'archive folder for scripts, plans and reports, with a SHA-256 manifest.',
+        'description': 'Build the customer folder: psimsch, SMV/CSV/XLSX results, drawings and waveform curves '
+        'only, no zip. JSON, scripts, batch files and logs are never delivered, even with include. archive=true also '
+        'writes a separate <name>-archive folder with a SHA-256 manifest; clean=true then deletes caches from the work '
+        'folder.',
         'schema': _schema(
             {
                 'work': PATH,
                 'output': PATH,
                 'name': {'type': 'string'},
                 'include': {'type': 'array', 'items': {'type': 'string'}},
+                'archive': {'type': 'boolean'},
+                'clean': {'type': 'boolean'},
             },
             ['work', 'output'],
         ),
@@ -290,6 +324,8 @@ TOOLS = [
             a['output'],
             *_optional(a, '--name', 'name'),
             *_repeat(a, '--include', 'include'),
+            *(['--archive'] if a.get('archive') else []),
+            *(['--clean'] if a.get('clean') else []),
         ],
     },
 ]

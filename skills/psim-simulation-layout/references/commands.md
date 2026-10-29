@@ -16,7 +16,8 @@
 | `build KIT [--no-open]` | 构建包入口（`build.bat` 调用）：建模、求解、出图，再用 PSIM 打开；每步写入 `build-report.json` | Windows + PSIM |
 | `screenshot SOURCE OUT` | 有 PSIM 且给的是 psimsch：打开软件截窗口；否则渲染计划 | 任何 |
 | `open PSIMSCH` | 用 PSIM 打开模型（不等待窗口关闭）；构建包最后会自动调用 | Windows + PSIM |
-| `deliver WORK OUT [--name N] [--include 通配符]` | 生成客户目录与归档目录 | 任何 |
+| `waveforms CSV DIR [--name N] [--signal S]... [--start T] [--end T] [--svg]` | 波形 CSV 画成曲线 PNG（每个信号一格、共用时间轴、逐像素列最小-最大包络；无 Pillow 时 SVG），并写出 XLSX（数据表 + 统计表：最小、最大、末值、按时间加权的平均值和有效值）；默认名 `waveforms` | 任何 |
+| `deliver WORK OUT [--name N] [--include 通配符] [--clean] [--archive] [--dry-run]` | 生成客户目录：只放模型、图纸和仿真结果（SMV、CSV、XLSX、波形曲线），JSON、脚本、批处理、日志和压缩包一律不放；`--clean` 交付后删除缓存，`--archive` 另写过程归档和 SHA-256 清单 | 任何 |
 | `handoff PLAN DIR [--name N] [--include 文件]` | 准备可校验的 Windows 原生执行任务 | 任何 |
 | `receive JOB RETURNED OUT` | 校验接收原生 PNG、SMV/CSV 和模型 | 任何 |
 | `compare REFERENCE CANDIDATE [--waveforms]` | 比较文件哈希或原始 CSV 数值，默认零容差 | 任何 |
@@ -24,7 +25,7 @@
 | `inspect PSIMSCH` | 读取元件类型、名称和参数 | Windows + PSIM |
 | `create PLAN PSIMSCH [--overwrite]` | 按计划创建原生模型（先跑预检） | Windows + PSIM |
 | `edit PSIMSCH CHANGES OUT [--overwrite]` | 改参数并另存，不覆盖输入 | Windows + PSIM |
-| `simulate PSIMSCH DIR [--parameters JSON]` | 原生求解，写出 `result.smv` 和 `native.csv` | Windows + PSIM |
+| `simulate PSIMSCH DIR [--parameters JSON]` | 原生求解，写出 `result.smv`、`native.csv`，以及波形曲线 `waveforms.png` 和 Excel 表 `waveforms.xlsx`（结果里 `waveforms.status` 为 `written`；画图失败不影响求解结果） | Windows + PSIM |
 | `export PSIMSCH OUT.emf [--dpi N]` | 原生出图：EMF、完整 PNG、去白边 PNG 和 `text_review` | Windows + PSIM |
 | `to-python PSIMSCH OUT.py` | 用本机 ConvertToPythonW 导出可重建脚本（只导出不执行） | Windows + PSIM |
 
@@ -122,4 +123,4 @@ python scripts/mcp_server.py --with ../../ad-schematic-layout/scripts   # 同时
 npx -y github:1837620622/ad-and-psim-skill mcp       # 不用克隆仓库，需要 Node 18+
 ```
 
-工具：`psim_env`、`psim_check`、`psim_preflight`、`psim_presim`、`psim_plan_edit`、`psim_render`、`psim_package`、`psim_screenshot`、`psim_create`、`psim_inspect`、`psim_edit`、`psim_simulate`、`psim_export`、`psim_measure`、`psim_deliver`、`psim_handoff`、`psim_receive`、`psim_compare`。计划、操作清单和修改清单参数既可以是文件路径，也可以直接写 JSON 文本；渲染和截图结果会附带图片。各客户端的配置写法见仓库 README。
+工具：`psim_env`、`psim_check`、`psim_preflight`、`psim_presim`、`psim_plan_edit`、`psim_render`、`psim_package`、`psim_screenshot`、`psim_create`、`psim_inspect`、`psim_edit`、`psim_simulate`、`psim_export`、`psim_measure`、`psim_waveforms`、`psim_deliver`、`psim_handoff`、`psim_receive`、`psim_compare`。计划、操作清单和修改清单参数既可以是文件路径，也可以直接写 JSON 文本；渲染和截图结果会附带图片。各客户端的配置写法见仓库 README。

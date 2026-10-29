@@ -45,7 +45,7 @@ PSIM 当前 RC 基准 CSV 与交接任务返回 CSV 的 SHA-256 相同：
 python -m unittest discover -s tests -v
 ```
 
-无需 AD 或 PSIM。CI 配置 Windows、macOS、Linux 与 Python 3.10/3.13；1.2.0 在本机 Windows/Python 3.12 运行 84 项测试，1.3.0 的修改在 Linux 上用 Python 3.10 和 3.13 运行 125 项（其中 3 项只在 Windows 上用 cmd.exe 实际运行 `build.bat` 和 `run.bat`，由 CI 的 Windows 机器执行；Linux 上 3.13 装 Pillow 13 和 resvg-py 时其余全部运行，Python 3.10 没有 Pillow 和 resvg-py，另跳过仿原生出图等 7 项）。覆盖：
+无需 AD 或 PSIM。CI 配置 Windows、macOS、Linux 与 Python 3.10/3.13；1.2.0 在本机 Windows/Python 3.12 运行 84 项测试，1.3.0 的修改在 Linux 上用 Python 3.10 和 3.13 运行 139 项（其中 3 项只在 Windows 上用 cmd.exe 实际运行 `build.bat` 和 `run.bat`，由 CI 的 Windows 机器执行；Linux 上 3.13 装 Pillow 13 和 resvg-py 时其余全部运行，Python 3.10 没有 Pillow 和 resvg-py，另跳过仿原生出图等 7 项）。覆盖：
 
 - 排版预检：两项示例 0 error、0 warning；悬空线、浮空标号、离栅格热端、隐式短接、不可编码字符等结构错误；文字重叠、穿件导线、四向连接、浮动标题、稀疏图面等版面问题；PSIM 的文字压符号、导线穿符号、仿真控制位置、参数写法。
 - SchDoc 读写：标准库读写复合文档；二进制引脚记录解码；示例生成文件的 SHA-256 固定（跨系统字节一致）；导入后重建的记录完全相同；各缩放比例下无源件热端在栅格上。
@@ -63,13 +63,18 @@ python -m unittest discover -s tests -v
 - 文字重叠：两项预检把文字互相重叠列为 error，文字离线条不到 2 个单位报 `TEXT_NEAR_LINE`；`place_text` 把故意弄乱的 AD、PSIM 示例修到 0 个文字问题，没有问题的计划不改动，`all` 把挪开的文字放回标准位置。另在测试之外做过随机压力试验：AD 954 个随机弄乱的版面（其中 478 个器件间距只有 80–100、文字偏移达 ±50）、PSIM 1181 个（其中 590 个元件间距只有 70–90、文字偏移达 ±60），`place_text` 全部修到 0 个文字问题；`all` 放回标准位置后 AD 120 个、PSIM 200 个也都没有文字问题；行距只有 20 的 AD 梯形网络也修到 0 个文字问题。
 - 离线预仿真：RC 阶跃与解析解最大偏差小于 1e-4 V（实测约 3e-5 V），RL 阶跃电流、RC 正弦稳态幅值与解析值一致；遇到开关等元件拒绝；步长过粗报出。
 - 离线预测：AD 示例预测 0 个编译 error、4 条缺少封装的 warning，与 Windows 实测一致；PSIM 示例预检、预览和预仿真都通过；离线预仿真与原生波形的对照记录。
-- 交付：`preflight/` 目录和 presim 文件归档，不进客户目录。
+- 交付：客户目录只有模型、原理图、仿真结果和波形曲线；计划和报告 JSON、脚本、批处理、日志、压缩包即使用 `--include` 点名也不进；`preflight/`、presim 文件和草图不交付；默认不写归档，`--archive` 才写；`--clean` 只删缓存，不删 History 和 `*.bak`；`receive` 的 `final/` 可直接交付。
+- 波形曲线和 Excel 表：20 万点里的单个尖峰保留在曲线和统计里；刻度文字（如 `2.5`、`25m`、`Time (ms)`）；XLSX 用标准库读回，每个数值与 CSV 相同，超过行数上限时接着写下一张表；同一输入重复生成的 PNG 和 XLSX 逐字节相同；时间窗和信号选择；时间倒序的 CSV 报错且不留半成品；没有 Pillow 时写 SVG；presim 曲线不交付；`simulate`、构建包和 MCP 都生成。
+- MCP 改图流程：一个服务器进程里导入现有 SchDoc、改参数、挪器件、改位号，故意把文字压在一起后预检报 `TEXT_OVERLAP`，`place_text` 修到 0 error，重新生成后读回确认改动都在，渲染出 PNG，交付时客户目录只有 PrjPcb 和 SchDoc、缓存被清理；PSIM 同样改参数、挪元件、改文字、自动摆放，再把离线预仿真画成曲线和 Excel 表，生成构建包。
+- 一条命令安装：临时主目录里运行 `bin/cli.mjs`，技能装进各 Agent 的目录（检测到 ZCode 时也装），Python 安装器的检查通过，再运行一次仍然通过。
 - 文件哈希、完整 CSV、零容差与显式容差、时间网格差异和无效数据。
 - 安装器检查脚本变更；npm 包排除私有参考和字节码；交付保留输入目录已有的 manifest。
 
 另做过人工对照：二进制引脚解码用公开的 AD 库文件样本核对过名称、编号、长度和方向；当前两张原生全图与真实窗口均查看过。便携图用于布局近似，不能替代原生图片。
 
-MCP 1.2.0 已在 Windows 上完成 29 工具枚举（1.3.0 增加到 32 个，协议测试在 Linux 上通过），并真实调用任务准备、AD/PSIM 原生结果接收和 CSV 比较；原生图片随 MCP 结果返回。Ruff、Markdown、技能元数据和打包白名单分别检查。
+CI 另有“新手”任务，在 Windows、macOS、Linux 上各跑一遍（Linux 再加一次系统自带、不允许 pip 安装的 Python）：不克隆仓库，`npx` 安装本次提交，检查自动装上的 Pillow、`check`、`doctor` 和 MCP 工具列表；再只用装好的技能目录，照 SKILL.md 的步骤把 AD、PSIM 示例从预检、改图、离线预测、生成、渲染做到交付，确认客户目录里没有 JSON、脚本、批处理和日志；最后卸载。CI 没有 PSIM，PSIM 交付一步用占位模型代替 `build.bat` 的产物。
+
+MCP 1.2.0 已在 Windows 上完成 29 工具枚举（1.3.0 增加到 33 个，协议测试和改图流程在 Linux 上通过），并真实调用任务准备、AD/PSIM 原生结果接收和 CSV 比较；原生图片随 MCP 结果返回。Ruff、Markdown、技能元数据和打包白名单分别检查。
 
 安全检查使用 betterleaks 1.9.0 扫描 Git 历史与待发布文件，没有检出凭据泄漏；OSV Scanner 2.7.0 扫描固定依赖 resvg-py 0.5.0、Pillow 13.0.0，没有检出已知漏洞。旧 Pillow 的扫描有命中，因此 Python 3.10 的可选安装只包含 resvg，Windows 原生 PNG 转换使用 Python 3.11+。扫描结论只覆盖所列版本和公开扫描范围。
 

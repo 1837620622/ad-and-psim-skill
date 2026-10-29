@@ -39,3 +39,145 @@ jobs:
           python skills/psim-simulation-layout/scripts/check_layout.py skills/psim-simulation-layout/assets/rc-filter-plan.json --strict
       - name: Markdown lint
         run: npx --yes markdownlint-cli2 "**/*.md"
+
+  # 新手的实际用法：不克隆仓库，一条 npx 命令装好，再照技能说明做一遍。
+  beginner:
+    name: beginner (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ['3.13']
+        include:
+          # 系统自带、不允许 pip 安装的 Python：Pillow 装不上时安装仍然完成，出图改写 SVG
+          - os: ubuntu-latest
+            python: system
+    defaults:
+      run:
+        shell: bash
+    env:
+      PACKAGE: github:${{ github.repository }}#${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/setup-python@v5
+        if: matrix.python != 'system'
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Empty home and work folders
+        run: |
+          base="$RUNNER_TEMP"
+          if command -v cygpath > /dev/null; then base=$(cygpath -m "$base"); fi
+          mkdir -p "$base/work"
+          echo "SKILLS_HOME=$base/home" >> "$GITHUB_ENV"
+      - name: One-command setup
+        working-directory: ${{ runner.temp }}/work
+        run: |
+          npx -y "$PACKAGE" --home "$SKILLS_HOME" | tee setup.txt
+          grep -q '安装完成' setup.txt
+          for host in .agents .claude; do
+            test -f "$SKILLS_HOME/$host/skills/ad-schematic-layout/SKILL.md"
+            test -f "$SKILLS_HOME/$host/skills/psim-simulation-layout/SKILL.md"
+          done
+      - name: Rerun (update), check and doctor
+        working-directory: ${{ runner.temp }}/work
+        run: |
+          npx -y "$PACKAGE" --home "$SKILLS_HOME" --json > report.json
+          npx -y "$PACKAGE" check --home "$SKILLS_HOME" > check.json
+          npx -y "$PACKAGE" doctor > doctor.json
+          node -e "
+            const read = (name) => JSON.parse(require('fs').readFileSync(name, 'utf8'));
+            const report = read('report.json');
+            if (!report.passed || !read('check.json').passed || !read('doctor.json').ad) throw new Error('setup report failed');
+            const pillow = report.pillow.status;
+            console.log('Python', report.python.version, report.python.executable, 'Pillow', pillow);
+            if ('${{ matrix.python }}' !== 'system' && pillow !== 'present') throw new Error('Pillow was not installed');
+            require('fs').appendFileSync(process.env.GITHUB_ENV, 'PY=' + report.python.executable.replace(/\\\\/g, '/') + '\n');
+          "
+      - name: MCP server answers through npx
+        working-directory: ${{ runner.temp }}/work
+        run: |
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | npx -y "$PACKAGE" mcp > mcp.out
+          "$PY" -c "
+          import json
+          replies = [json.loads(line) for line in open('mcp.out', encoding='utf-8')]
+          tools = {tool['name'] for tool in replies[-1]['result']['tools']}
+          assert len(tools) == 33 and {'ad_edit', 'psim_plan_edit', 'psim_waveforms'} <= tools, sorted(tools)
+          "
+      - name: AD guide with the installed skill
+        working-directory: ${{ runner.temp }}/work
+        run: |
+          ad="$SKILLS_HOME/.claude/skills/ad-schematic-layout/scripts/native_ad.py"
+          ext=svg; "$PY" -c "import PIL" 2> /dev/null && ext=png
+          mkdir -p ad/work && cd ad
+          "$PY" "$ad" env > env.json
+          cp "$SKILLS_HOME/.claude/skills/ad-schematic-layout/assets/rc-filter-plan.json" work/plan.json
+          "$PY" "$ad" check work/plan.json --preview "draft.$ext" > check.json
+          echo '[{"op": "set_value", "ref": "R1", "value": "22k"}, {"op": "place_text", "all": true}]' > work/ops.json
+          "$PY" "$ad" edit work/plan.json work/ops.json work/plan2.json > edit.json
+          "$PY" "$ad" preflight work/plan2.json preflight/ > preflight.json
+          "$PY" "$ad" create work/plan2.json out/ > create.json
+          "$PY" "$ad" render out/RC_Filter.SchDoc "view.$ext" > render.json
+          "$PY" "$ad" handoff work/plan2.json job/ > handoff.json
+          test -f job/run.bat && test -f "view.$ext" && test -f "draft.$ext"
+          "$PY" "$ad" deliver out/ delivery/ --name RC --clean > deliver.json
+          "$PY" -c "
+          import json, pathlib
+          load = lambda name: json.loads(pathlib.Path(name).read_text(encoding='utf-8'))
+          assert load('check.json')['summary']['errors'] == 0
+          assert load('edit.json')['layout_check']['errors'] == 0
+          assert load('preflight.json')['ready_for_windows'], load('preflight.json')
+          files = sorted(p.name for p in pathlib.Path('delivery/RC').rglob('*') if p.is_file())
+          assert files == ['RC_Filter.PrjPcb', 'RC_Filter.SchDoc'], files
+          "
+      - name: PSIM guide with the installed skill
+        working-directory: ${{ runner.temp }}/work
+        run: |
+          psim="$SKILLS_HOME/.claude/skills/psim-simulation-layout/scripts/native_psim.py"
+          ext=svg; "$PY" -c "import PIL" 2> /dev/null && ext=png
+          mkdir -p psim/work && cd psim
+          "$PY" "$psim" env > env.json
+          cp "$SKILLS_HOME/.claude/skills/psim-simulation-layout/assets/rc-filter-plan.json" work/plan.json
+          "$PY" "$psim" check work/plan.json > check.json
+          echo '[{"op": "set", "name": "R1", "field": "Resistance", "value": "220"}, {"op": "place_text", "all": true}]' > work/ops.json
+          "$PY" "$psim" plan-edit work/plan.json work/ops.json work/plan2.json > edit.json
+          "$PY" "$psim" render work/plan2.json "view.$ext" > render.json
+          "$PY" "$psim" preflight work/plan2.json preflight/ > preflight.json
+          "$PY" "$psim" presim work/plan2.json work/presim.csv > presim.json
+          "$PY" "$psim" waveforms work/presim.csv work/ > waveforms.json
+          test -f work/presim-waveforms.xlsx && test -f "work/presim-waveforms.$ext"
+          "$PY" "$psim" package work/plan2.json kit/ > package.json
+          test -f kit/build.bat
+          # CI 没有 PSIM：用占位模型和预仿真 CSV 代替 build.bat 的产物，检查交付规则
+          mkdir -p kit/result && cp work/presim.csv kit/result/native.csv
+          echo placeholder > kit/RC_Filter.psimsch && echo log > kit/build.log
+          "$PY" "$psim" waveforms kit/result/native.csv kit/result/ > kit-waveforms.json
+          "$PY" "$psim" deliver kit/ delivery/ --name RC --clean > deliver.json
+          "$PY" -c "
+          import json, pathlib
+          load = lambda name: json.loads(pathlib.Path(name).read_text(encoding='utf-8'))
+          assert load('check.json')['summary']['errors'] == 0
+          assert load('edit.json')['layout_check']['errors'] == 0
+          assert load('preflight.json')['ready_for_windows'], load('preflight.json')
+          assert load('waveforms.json')['summary']
+          root = pathlib.Path('delivery/RC')
+          files = sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file())
+          assert {'RC_Filter.psimsch', 'result/native.csv', 'result/waveforms.xlsx'} <= set(files), files
+          "
+      - name: Only models, drawings and results are delivered
+        working-directory: ${{ runner.temp }}/work
+        run: |
+          find ad/delivery psim/delivery -type f | sort
+          bad=$(find ad/delivery psim/delivery -type f \( -name '*.json' -o -name '*.py' -o -name '*.bat' -o -name '*.log' -o -name '*.zip' \))
+          if [ -n "$bad" ]; then echo "过程文件进了交付目录：$bad"; exit 1; fi
+      - name: Uninstall
+        working-directory: ${{ runner.temp }}/work
+        run: |
+          npx -y "$PACKAGE" uninstall --home "$SKILLS_HOME" > uninstall.json
+          test ! -e "$SKILLS_HOME/.claude/skills/ad-schematic-layout"
+          test ! -e "$SKILLS_HOME/.agents/skills/psim-simulation-layout"

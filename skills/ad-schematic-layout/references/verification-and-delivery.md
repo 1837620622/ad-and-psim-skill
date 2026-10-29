@@ -54,16 +54,18 @@ python scripts/review_emf_text.py drawing.emf --output text-review.json
 ## 交付
 
 ```text
-python scripts/native_ad.py deliver work/ delivery/ --name 项目名
+python scripts/native_ad.py deliver work/ delivery/ --name 项目名 --clean
 ```
 
-生成两个目录，工作目录里的文件只复制、不移动：
+`delivery/项目名/` 是给客户的目录，保持原来的相对路径，只放 PrjPcb、SchDoc、库文件和正式图纸（原生导出的 PDF、PNG、SVG、EMF）。`export` 时把图写进工作目录（例如 `work/drawing/`），`deliver work/` 才会带上。
 
-| 目录 | 内容 |
-| --- | --- |
-| `delivery/项目名/` | 给客户：PrjPcb、SchDoc、库文件、正式图纸（PDF、PNG、SVG、EMF），保持原来的相对路径 |
-| `delivery/项目名-archive/` | 自己留：计划 JSON、脚本、报告、日志、草图和便携渲染，以及 `manifest.json`（每个文件的 SHA-256） |
+硬性规则：计划和报告 JSON、脚本（`.py`、`.pas` 等）、批处理、日志、压缩包是制作过程中的文件，一律不进客户目录，`--include` 也放不进去；文件名带 `draft`、`.render`、`preview` 的图和 `preflight/` 目录也不交付。结果里的 `delivered` 和 `not_delivered` 分别列出放进去和没放进去的文件；用 `--include` 点名的过程文件也会被拒绝，并在 `warnings` 里说明。
 
-不生成压缩包。文件名带 `draft`、`.render`、`preview` 的图片算过程文件；AD 自动生成的 `History`、`__Previews`、`*.SchDocPreview` 不复制。额外要交付的文件用 `--include`。交付前在 Windows 上从客户目录重新打开工程，确认引用都在。
+- 工作目录里的文件只复制、不移动；不生成压缩包。AD 自动生成的 `History`、`__Previews`、`*.SchDocPreview` 不复制。
+- `--clean`：交付后删除工作目录里的缓存（`__Previews`、`*.SchDocPreview`、`*.PrjPcbStructure`、`__pycache__`、`Thumbs.db` 等，AD 和 Python 会自动重建），不删 History 备份和 `*.bak`。
+- `--archive`：需要自己留底时，另写 `delivery/项目名-archive/`，放过程文件和 `manifest.json`（每个文件的 SHA-256）。
+- `--include`：额外要交付的文件（如说明文档）；`--dry-run` 先看会交付哪些文件。
+
+交付前在 Windows 上从客户目录重新打开工程，确认引用都在。
 
 最终说明写清：实际验证的软件版本、error 与 warning 数、未完成的范围。没有用户同意不要清理历史交付。

@@ -201,14 +201,17 @@ TOOLS = [
     },
     {
         'name': 'ad_deliver',
-        'description': 'Build the customer folder (project and drawings only, no zip) and a separate archive '
-        'folder for scripts, plans and reports, with a SHA-256 manifest.',
+        'description': 'Build the customer folder: AD project, schematics, libraries and drawings only, no zip. '
+        'JSON, scripts, batch files and logs are never delivered, even with include. archive=true also writes a '
+        'separate <name>-archive folder with a SHA-256 manifest; clean=true then deletes caches from the work folder.',
         'schema': _schema(
             {
                 'work': PATH,
                 'output': PATH,
                 'name': {'type': 'string'},
                 'include': {'type': 'array', 'items': {'type': 'string'}},
+                'archive': {'type': 'boolean'},
+                'clean': {'type': 'boolean'},
             },
             ['work', 'output'],
         ),
@@ -218,6 +221,8 @@ TOOLS = [
             a['output'],
             *_optional(a, '--name', 'name'),
             *_repeat(a, '--include', 'include'),
+            *(['--archive'] if a.get('archive') else []),
+            *(['--clean'] if a.get('clean') else []),
         ],
     },
 ]

@@ -1,6 +1,6 @@
 """PSIM 命令行：预检、修改计划、便携渲染、Windows 构建包、截图、原生建模求解出图、整理交付。
 
-check/plan-edit/render/package/deliver 在任何系统可用；version/inspect/create/edit/simulate/export/
+check/plan-edit/render/presim/waveforms/package/deliver 在任何系统可用；version/inspect/create/edit/simulate/export/
 to-python 和窗口截图需要 Windows、PSIM 及其 Python 接口。psimsch 是 PSIM 私有二进制格式，
 其他系统通过 package 生成构建包，在 Windows 上由 PSIM 自己写出原生文件。
 """
@@ -34,6 +34,7 @@ PACKAGE_TOOLS = (
     'capture.py',
     'analyze_waveform.py',
     'deliver.py',
+    'waveforms.py',
     'mcp_server.py',
     'mcp_tools.py',
     'native_discovery.py',
@@ -308,7 +309,19 @@ def simulate(psim, source, folder, parameters):
         'csv': str(table),
         'columns': names,
         'samples': counts[0],
+        'waveforms': curves_and_table(table, folder),
     }
+
+
+def curves_and_table(table, folder):
+    """把原生 CSV 画成波形曲线（PNG，无 Pillow 时 SVG）并转成 XLSX；失败只记录原因，不影响原生求解结果。"""
+    try:
+        from waveforms import waveforms
+
+        made = waveforms(table, folder)
+    except (ImportError, ValueError, OSError) as error:
+        return {'status': 'failed', 'error': f'{type(error).__name__}: {error}'}
+    return {'status': 'written', **{k: made[k] for k in ('plot', 'xlsx', 'summary', 'warnings')}}
 
 
 def to_python(psim, source, target):
@@ -481,7 +494,7 @@ PACKAGE_README = """{name} - PSIM 构建包 / PSIM build kit
 
 在装有 PSIM 的 Windows 电脑上双击 build.bat，会依次：
 1. 由 PSIM 原生接口按 plan.json 写出 {name}.psimsch；
-2. 原生求解，结果写入 result\\（SMV 与 CSV）；
+2. 原生求解，结果写入 result\\（SMV、CSV，波形曲线 waveforms.png 和 Excel 表 waveforms.xlsx）；
 3. 原生出图，写入 drawing\\（EMF、PNG）；
 4. 用 PSIM 打开做好的 {name}.psimsch（设置环境变量 PSIM_NO_OPEN 可跳过）。
 每一步的结果写在 build-report.json；失败时窗口停住显示原因。再次双击会沿用已有的 {name}.psimsch
@@ -490,9 +503,10 @@ PACKAGE_README = """{name} - PSIM 构建包 / PSIM build kit
 psimsch 是 PSIM 的私有格式，只能由 PSIM 自己写出，所以这一步必须在装有 PSIM 的 Windows 上完成。
 
 On a Windows PC with PSIM, double-click build.bat. It writes {name}.psimsch through PSIM's own API,
-runs the solver (result\\), exports the drawing (drawing\\) and opens the model in PSIM (set PSIM_NO_OPEN to
-skip). Every step is recorded in build-report.json and the window stays open on failure. Running it again
-reuses the existing {name}.psimsch and redoes the solve and drawing; delete the model to rebuild it from plan.json.
+runs the solver (result\\: SMV, CSV, waveforms.png curves and waveforms.xlsx), exports the drawing
+(drawing\\) and opens the model in PSIM (set PSIM_NO_OPEN to skip). Every step is recorded in
+build-report.json and the window stays open on failure. Running it again reuses the existing {name}.psimsch
+and redoes the solve and drawing; delete the model to rebuild it from plan.json.
 Needs 64-bit Python 3.10+; native PNG also needs Python 3.11+ and Pillow 13. Set PSIM_DIR if PSIM is not found.
 
 preview.render.png 是仿原生预览，不是 PSIM 原生导出。
@@ -531,8 +545,8 @@ def build(folder, psim_dir=None, psim=None, open_after=None):
             create(psim, plan, model)
             report['steps']['create'] = {'status': 'created', 'layout_check': layout['summary']}
         step(2, '原生求解')
-        for old in (result / 'result.smv', result / 'native.csv'):
-            old.unlink(missing_ok=True)
+        for old in ('result.smv', 'native.csv', 'waveforms.png', 'waveforms.svg', 'waveforms.xlsx'):
+            (result / old).unlink(missing_ok=True)
         report['steps']['simulate'] = simulate(psim, model, result, {})
         step(3, '原生出图')
         for old in (drawing / f'{name}.emf', drawing / f'{name}.png', drawing / f'{name}-compact.png'):
@@ -669,6 +683,7 @@ def environment(psim_dir=None):
             'plan-edit',
             'render',
             'presim',
+            'waveforms',
             'package',
             'handoff',
             'receive',
@@ -729,6 +744,14 @@ def main():
     item = sub.add_parser('presim', help='离线预仿真线性电路（不需要 PSIM，结果不是 PSIM 求解）')
     item.add_argument('plan', type=Path)
     item.add_argument('csv', type=Path)
+    item = sub.add_parser('waveforms', help='波形 CSV 画成曲线图（PNG/SVG）并转成 Excel 表（XLSX）')
+    item.add_argument('csv', type=Path)
+    item.add_argument('folder', type=Path)
+    item.add_argument('--name', help='输出文件名（不含扩展名），默认 waveforms')
+    item.add_argument('--signal', action='append', default=[], help='只画、只导出这些信号，可重复')
+    item.add_argument('--start', type=float, help='开始时间 (s)')
+    item.add_argument('--end', type=float, help='结束时间 (s)')
+    item.add_argument('--svg', action='store_true', help='画 SVG 而不是 PNG')
     item = sub.add_parser('package', help='生成 Windows 一键构建包')
     item.add_argument('plan', type=Path)
     item.add_argument('folder', type=Path)
@@ -741,11 +764,13 @@ def main():
     item = sub.add_parser('screenshot', help='有 PSIM 时截取窗口，否则便携渲染')
     item.add_argument('source', type=Path, help='psimsch（Windows）或计划 JSON')
     item.add_argument('target', type=Path)
-    item = sub.add_parser('deliver', help='整理交付目录与归档目录')
+    item = sub.add_parser('deliver', help='整理客户交付目录（只放模型、图纸和结果）')
     item.add_argument('work', type=Path)
     item.add_argument('output', type=Path)
     item.add_argument('--name')
     item.add_argument('--include', action='append', default=[])
+    item.add_argument('--archive', action='store_true', help='过程文件另存 <名称>-archive/')
+    item.add_argument('--clean', action='store_true', help='交付后删除工作目录里的缓存')
     sub.add_parser('version', help='原生 API 版本')
     item = sub.add_parser('inspect', help='读取原生元件与参数')
     item.add_argument('source', type=Path)
@@ -828,6 +853,10 @@ def main():
             if args.csv.suffix.lower() != '.csv':
                 raise ValueError('输出须为 .csv')
             data = presimulate(read_json(args.plan), args.csv)
+        elif command == 'waveforms':
+            from waveforms import waveforms
+
+            data = waveforms(args.csv, args.folder, args.name, args.signal, args.start, args.end, args.svg)
         elif command == 'package':
             data = package(args.plan, args.folder, args.name)
         elif command == 'build':
@@ -840,7 +869,9 @@ def main():
         elif command == 'deliver':
             from deliver import deliver
 
-            data = deliver(args.work, args.output, args.name, args.include)
+            data = deliver(
+                args.work, args.output, args.name, args.include, archive=args.archive, clean_cache=args.clean
+            )
         elif command == 'handoff':
             from native_job import prepare
 

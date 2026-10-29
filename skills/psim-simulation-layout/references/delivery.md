@@ -16,7 +16,8 @@
 | --- | --- | --- |
 | PSIM/Simview 窗口截图（`screenshot` 在 Windows 上） | 软件窗口截图 | 示波器实测 |
 | 原生绘图或打印导出（`export`） | PSIM 原理图导出、原生波形导出 | 软件窗口截图 |
-| 原生数据用绘图工具画的 | 基于 PSIM 原始数据绘制的结果图 | Simview 截图 |
+| 原生数据用绘图工具画的（含 `simulate` 自动生成的 `waveforms.png`） | 基于 PSIM 原始数据绘制的波形曲线 | Simview 截图 |
+| 离线预仿真数据画的（`presim-waveforms.png`） | 离线预仿真曲线，不交付 | PSIM 波形 |
 | 便携渲染（`render`，无需 PSIM） | 预览图 | 原生导出、截图 |
 
 用户要求真实软件截图时，截实际窗口并保留原图；报告里可以按约定裁切。不要给导出图或重绘曲线套假的菜单、标题栏或窗口边框。
@@ -29,20 +30,41 @@
 - 同一份报告里字体、坐标、颜色含义和窗口一致；按实际印刷尺寸检查，而不是只在大屏上放大看。
 - 不加彩色面板、装饰背景、伪 3D 或宣传式标题。
 
+## 波形曲线和 Excel 表
+
+`simulate` 求解后自动把原生 CSV 画成 `waveforms.png` 并转成 `waveforms.xlsx`，和 SMV、CSV 放在同一个结果目录；Windows 构建包的 `build.bat` 也会生成。其他 CSV（客户给的数据、离线预仿真）用 `waveforms` 命令：
+
+```text
+python scripts/native_psim.py waveforms result/native.csv result/ --signal Vo --signal IL --start 0.01 --end 0.02
+```
+
+- 曲线：每个信号一格，共用时间轴；每个像素列画该列所有样本的最小值到最大值，尖峰和振荡不会被抽稀掉。坐标刻度用 1、2、2.5、5 的整数倍，单位带 m、µ、k 等前缀。没有 Pillow 时写 `waveforms.svg`。
+- Excel：「波形数据」表是 CSV 的全部数值（超过一张表的行数上限时接着写「波形数据 2」），「统计」表列出每个信号的最小值、最大值、末值，以及按时间加权的平均值和有效值。
+- `--signal` 选信号（不写时全部），`--start`、`--end` 截时间窗；结果里的 `summary` 和 Excel 统计表相同，可以直接引用到报告。
+- 源文件名含 `presim` 时输出名默认是 `presim-waveforms`，交付时自动排除。
+
 ## 交付
 
 ```text
-python scripts/native_psim.py deliver work/ delivery/ --name 项目名 --include "params*.txt"
+python scripts/native_psim.py deliver work/ delivery/ --name 项目名 --include "params*.txt" --clean
 ```
 
-生成两个目录，工作目录里的文件只复制、不移动：
+`delivery/项目名/` 是给客户的目录，保持原来的相对路径，只放：
 
-| 目录 | 内容 |
+| 类别 | 文件 |
 | --- | --- |
-| `delivery/项目名/` | 给客户：psimsch（含子电路）、需要的 DLL、仿真结果（SMV、SSF、CSV）、正式图纸，保持原来的相对路径 |
-| `delivery/项目名-archive/` | 自己留：计划 JSON、Python 脚本、报告、日志、草图和便携渲染，以及 `manifest.json`（每个文件的 SHA-256） |
+| 模型 | psimsch（含子电路）、需要的 DLL、`--include` 带上的参数文件 |
+| 图纸 | 原生导出的原理图（PNG、PDF、SVG、EMF） |
+| 仿真结果 | SMV、SSF、CSV、XLSX，波形曲线 `waveforms.png` |
 
-不生成压缩包。参数文件等模型依赖用 `--include` 加进客户目录。用户限定了交付目录只含几类文件、或要求 AD 和 PSIM 分开时，严格按清单来。
+硬性规则：计划和报告 JSON、Python 脚本、批处理、日志、压缩包是制作过程中的文件，一律不进客户目录，`--include` 也放不进去；文件名带 `draft`、`.render`、`preview` 的图、`preflight/` 目录和名字带 `presim` 的离线预仿真结果也不交付。结果里的 `delivered` 和 `not_delivered` 分别列出放进去和没放进去的文件；用 `--include` 点名的过程文件也会被拒绝，并在 `warnings` 里说明。
+
+- 工作目录里的文件只复制、不移动；不生成压缩包。
+- `--clean`：交付后删除工作目录里的缓存（`__pycache__`、`*.pyc`、`Thumbs.db` 等），不删 History 备份和 `*.bak`。
+- `--archive`：需要自己留底时，另写 `delivery/项目名-archive/`，放过程文件和 `manifest.json`（每个文件的 SHA-256）。
+- `--dry-run`：先看会交付哪些文件。
+
+用户限定了交付目录只含几类文件、或要求 AD 和 PSIM 分开时，严格按清单来。
 
 交付前在 Windows 上从客户目录重新打开模型并做与修改相称的复算，确认 SSF、子电路、参数文件和库引用都在。报告和模型里的输入、负载、频率、寄生、统计窗口与结果一致。
 

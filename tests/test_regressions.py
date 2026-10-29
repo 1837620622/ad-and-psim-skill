@@ -224,7 +224,7 @@ class DeliveryProtection(unittest.TestCase):
             original = '{"source":"keep"}'
             (work / 'manifest.json').write_text(original, encoding='utf-8')
             (work / 'manifest.source.json').write_text('another source file', encoding='utf-8')
-            result = deliver(work, Path(folder, 'out'), 'X')
+            result = deliver(work, Path(folder, 'out'), 'X', archive=True)
             archive = Path(result['archive'])
             manifest = json.loads((archive / 'manifest.json').read_text(encoding='utf-8'))
             copied = next(e for e in manifest['files'] if e.get('source_path') == 'manifest.json')

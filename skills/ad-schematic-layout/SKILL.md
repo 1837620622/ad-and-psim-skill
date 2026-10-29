@@ -33,7 +33,7 @@ metadata:
 5. **生成文件。** `create` 写出 SchDoc 与 PrjPcb；预检有 error 时它会拒绝写出。
 6. **改已有图。** `import` 把现有 SchDoc 转成计划，`edit` 按操作清单修改（移动器件时相连导线自动正交重连），再 `create` 到新目录。带库图形的原生器件不能导入，改用原生脚本，见 [原生操作与电气检查](references/native-and-electrical.md)。
 7. **原生确认（Windows）。** `verify` 编译并比较逐引脚网表；`export` 原生出图，结果里的 `text_review` 必须通过（无文字重叠、越界、压线），再逐区看图。
-8. **交付。** `deliver` 生成两个目录：给客户的只有工程和图纸，过程文件放归档目录，不打压缩包。见 [核验与交付](references/verification-and-delivery.md)。
+8. **交付。** `deliver --clean` 生成客户目录：只放工程和原生图纸，不放 JSON、脚本和日志，不打压缩包，并清理缓存。见 [核验与交付](references/verification-and-delivery.md)。
 
 在 Mac/Linux 上工作时，用 `handoff` 准备完整任务目录，传到 Windows 双击 `run.bat`，再用 `receive` 校验接收。PNG 渲染默认仿 Windows 原生出图（RC 示例与原生导出尺寸相同，线条和文字像素 97.8% 在 1 像素内对齐），用来在没有 AD 时看效果；对外和最终确认仍以接收回来的原生 PNG 为准，接收器不重绘它。详见 [交接与结果一致性](references/handoff.md)。
 
@@ -52,7 +52,7 @@ metadata:
 5. **离线预测。** `python scripts/native_ad.py preflight work/plan2.json preflight/`。`ready_for_windows` 为 true 才继续；为 false 时按 `blocking` 逐条修。`expected_warnings` 是预计的编译 warning（例如缺封装），要在交付说明里写明。
 6. **生成工程。** `python scripts/native_ad.py create work/plan2.json out/`，得到 `.SchDoc` 和 `.PrjPcb`。任何系统生成的文件都相同，拷到 Windows 双击 `.PrjPcb` 就能用 AD 打开。不要手写或改动 SchDoc 二进制。
 7. **Windows 原生确认。** 在装有 AD 的 Windows 上运行 `verify`（编译并比较网表）和 `export`（`text_review` 必须通过）。在 Mac/Linux 上就用 `handoff work/plan2.json job/`，把 `job/` 拷到 Windows 双击 `run.bat`，拿回 `native-results/` 后运行 `receive`。
-8. **交付。** `deliver out/ delivery/ --name 项目名`。
+8. **交付。** 在 Windows 上直接做的，把原生图导出到工程目录里（`export out/X.SchDoc out/drawing/`），再运行 `python scripts/native_ad.py deliver out/ delivery/ --name 项目名 --clean`；用 `handoff` 的，`receive` 得到的 `final/` 里已有工程和原生图，运行 `deliver final/ delivery/ --name 项目名 --clean`。客户目录只能有 PrjPcb、SchDoc、库文件和原生图纸；看结果里的 `delivered`，出现 `.json`、`.py`、`.pas`、`.log` 就是出错了。不要另外拷文件进客户目录。
 
 常见错误：
 
@@ -78,8 +78,8 @@ python scripts/native_ad.py render out/X.SchDoc view.png          # 仿原生渲
 python scripts/native_ad.py screenshot out/X.SchDoc shot.png      # 有 AD 截窗口，否则渲染
 python scripts/native_ad.py open out/X.PrjPcb                     # Windows：用 AD 打开（Mac/Linux 生成的文件可直接打开）
 python scripts/native_ad.py verify out/X.PrjPcb verify/ --expected out/expected.json
-python scripts/native_ad.py export out/X.SchDoc drawing/
-python scripts/native_ad.py deliver out/ delivery/ --name X
+python scripts/native_ad.py export out/X.SchDoc out/drawing/       # 原生出图放进工程目录，交付时一起带上
+python scripts/native_ad.py deliver out/ delivery/ --name X --clean  # 客户目录只放工程和图纸
 python scripts/native_ad.py handoff plan.json job/
 python scripts/native_ad.py receive job/ returned-results/ final/
 python scripts/native_ad.py compare reference.SchDoc final/X.SchDoc
@@ -93,6 +93,7 @@ python scripts/native_ad.py compare reference.SchDoc final/X.SchDoc
 - 图上的位号和参数用关联属性，改值后重新生成，不用静态文字盖住旧值。
 - 便携渲染和草图只用于调试，对外的图用 AD 原生出图或真实窗口截图，并说明来源。
 - 编译 0 error 不等于 0 warning，也不等于能直接制板；结论写清楚验证到哪一步。
+- 客户目录只放工程和正式图纸。计划和报告 JSON、Python 和 DelphiScript 脚本、批处理、日志都是过程文件，一律不交付；交付用 `deliver`，不要手工拷贝。
 
 ## 参考资料
 

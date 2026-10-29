@@ -8,7 +8,7 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab)
 ![Windows | macOS | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555555)
 ![Agent Skills](https://img.shields.io/badge/Agent%20Skills-2%20skills-6f42c1)
-![MCP](https://img.shields.io/badge/MCP-32%20tools-0a7ea4)
+![MCP](https://img.shields.io/badge/MCP-33%20tools-0a7ea4)
 
 给 AI 编程助手用的两项技能：按一句话需求做出**可编辑的 Altium Designer 原理图**和**用 PSIM 真实求解的仿真模型**，排版按正式工程图的规则逐项检查。交付的是原生工程文件，不是图片。
 
@@ -33,9 +33,9 @@
 | 预览 | 仿 Windows 原生出图（同比例、同线宽、ClearType 式文字）；接收 Windows 原生 PNG 后直接显示原图 | 仿 Windows 原生出图（同取景、按原生规则摆文字）；接收 Windows 原生 PNG 后直接显示原图 |
 | 上 Windows 之前 | 预测编译 warning、网表和图面（`preflight`） | 按原生规则预测文字位置；线性电路离线预仿真（`presim`） |
 | 跨系统交接 | Mac/Linux 准备任务，Windows 编译出图，再校验接收 | Mac/Linux 准备任务，Windows 原生求解，再接收 SMV/CSV 与原图 |
-| 原生（Windows） | 编译、逐引脚网表比较、原生出图、窗口截图 | 建模、改参数、求解、波形读回、原生出图、窗口截图 |
+| 原生（Windows） | 编译、逐引脚网表比较、原生出图、窗口截图 | 建模、改参数、求解、波形读回并画成曲线和 Excel 表、原生出图、窗口截图 |
 | 结果核验 | 原生 EMF 上的文字重叠、越界、压线审查 | 同左；另有按时间加权的功率、效率、RMS、门极频率测量 |
-| 交付 | 客户目录只放工程和图纸，过程文件另存归档，不打压缩包 | 客户目录只放模型和仿真结果，过程文件另存归档 |
+| 交付 | 客户目录只放工程和正式图纸；JSON、脚本、日志一律不放，不打压缩包 | 客户目录只放模型、原理图、仿真结果、波形曲线和 CSV/XLSX 数据表 |
 
 ## 工作流程
 
@@ -45,9 +45,9 @@
 4. **生成**：AD 写出 SchDoc + PrjPcb；PSIM 生成构建包，或在 Windows 上直接原生建模。
 5. **原生核验**（Windows）：AD 编译并逐引脚比对网表；PSIM 原生求解并读回波形。
 6. **原生出图**：检查文字重叠、越界和压线，再人工看图。
-7. **交付**：客户目录加过程归档。
+7. **交付**：客户目录只放模型、图纸和仿真结果（波形曲线、CSV、XLSX），顺手清理缓存。
 
-每一步都输出 JSON，模型逐条读取、逐条修正，不靠模型自己判断"差不多"。
+每一步都输出 JSON，模型逐条读取、逐条修正，不靠模型自己判断"差不多"。这些 JSON 和脚本只在制作过程中用，不交给客户。
 
 ## 运行要求
 
@@ -56,7 +56,7 @@
 | 预检、生成、修改、渲染为 SVG、构建包、交付 | Python 3.10+（只用标准库），Windows、macOS、Linux 均可 |
 | 渲染为 PNG | 仿原生出图需要 Pillow 和 Times New Roman/Arial（Windows、macOS 自带）或字宽相同的 Liberation 字体（Linux：`fonts-liberation`）；没有时用 resvg-py 或 Pillow 平滑渲染。可选依赖：`python -m pip install -r requirements-optional.txt` |
 | Windows 原生 EMF 转 PNG、截图格式转换 | Python 3.11+、Pillow 13（已包含在上述可选依赖中） |
-| 用 npx 安装或启动 MCP | Node.js 18+ |
+| 用 npx 安装或启动 MCP | Node.js 18+ 和 Git（npx 从 GitHub 拉取本包时要用 Git） |
 | AD 编译与原生出图 | Windows + 已授权的 Altium Designer（验证过 Enterprise 26.4.1） |
 | PSIM 原生建模、求解与出图 | Windows + 已授权的 PSIM 及其 Python 接口（验证过 2026.0.0.7209） |
 
@@ -75,7 +75,7 @@ AD 和 PSIM 只有 Windows 版。本包把能脱离软件完成的工作都做�
 | AD：生成 SchDoc + PrjPcb | ✓ | ✓（文件与 Windows 上生成的完全相同） |
 | PSIM：生成构建包 | ✓ | ✓（拷到装有 PSIM 的 Windows 电脑双击 `build.bat`） |
 | AD 编译与出图、PSIM 建模与求解、窗口截图 | ✓（需装软件） | 交给有软件的 Windows 电脑 |
-| 波形测量、整理交付 | ✓ | ✓ |
+| 波形测量、波形曲线和 Excel 表、整理交付 | ✓ | ✓ |
 
 Mac/Linux 不用装 AD/PSIM：AD 文件可以直接在 Mac/Linux 上生成，交付前到 Windows 原生编译、出图；PSIM 模型和仿真结果都由 Windows 上的 PSIM 生成。具体做法见「使用」里的[在 Mac 或没装 PSIM 的电脑上做 PSIM 仿真文件](#在-mac-或没装-psim-的电脑上做-psim-仿真文件)和[在 Mac/Linux 上准备，交给 Windows 运行](#在-maclinux-上准备交给-windows-运行)。
 
@@ -89,25 +89,49 @@ Mac/Linux 不用装 AD/PSIM：AD 文件可以直接在 Mac/Linux 上生成，交
 
 ## 安装
 
-### 方式一：npx（推荐）
+### 一条命令（推荐）
+
+先装好 [Node.js](https://nodejs.org/) 18+、[Git](https://git-scm.com/) 和 [Python](https://www.python.org/downloads/) 3.10+（已经有的跳过）：
 
 ```bash
-npx -y github:1837620622/ad-and-psim-skill install            # 装到 ~/.agents/skills 和 ~/.claude/skills
+# Windows：在 PowerShell 里逐行运行，装完关掉终端再重新打开
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+winget install Python.Python.3.13
+
+# macOS（Homebrew）
+brew install node git python
+
+# Linux：git 和 python3 用发行版自带的包；Node.js 从 nodejs.org 装 18 或更新的版本（Ubuntu 22.04 自带的太旧）
+sudo apt install git python3
+```
+
+然后运行：
+
+```bash
+npx -y github:1837620622/ad-and-psim-skill
+```
+
+它会依次做三件事，并用中文告诉你每一步的结果：
+
+1. **安装技能**到 `~/.agents/skills`（Codex、Gemini CLI、GitHub Copilot、Cursor、OpenCode 共用）和 `~/.claude/skills`（Claude Code）；存在 `~/.zcode` 时也装到 ZCode。
+2. **检查 Python**，缺 Pillow 时（Python 3.11+）自动安装 `requirements-optional.txt` 里固定的版本（PNG 出图和波形曲线用它，没有时改写 SVG）；没找到 Python 时给出各系统的安装方法。不想自动装 Pillow 时加 `--no-pillow`。
+3. **检查 Altium Designer 和 PSIM**：找到就显示安装位置；没找到时说明本机能做哪些事，哪些要交给装有软件的 Windows。
+
+装完重新打开 Agent（或开一个新会话），直接说需求即可。以后想更新，再运行一次同一条命令。
+
+### 其他安装方式
+
+```bash
+npx -y github:1837620622/ad-and-psim-skill install            # 只装技能（JSON 输出）
 npx -y github:1837620622/ad-and-psim-skill install --all      # 装到全部已知 Agent 目录
-npx -y github:1837620622/ad-and-psim-skill doctor             # 检查 Python、Pillow、AD、PSIM
+npx -y github:1837620622/ad-and-psim-skill doctor             # 只检查 Python、Pillow、AD、PSIM
+npx skills add 1837620622/ad-and-psim-skill                   # Skills CLI
 ```
 
-### 方式二：Skills CLI
+**CC Switch**：在「Skills → 仓库管理 → 添加仓库」中填写：Owner `1837620622`，Name `ad-and-psim-skill`，Branch `main`，Subdirectory `skills`，然后安装两个技能。部分版本只识别根目录下的 SKILL.md，检测不到时改用一条命令安装。
 
-```bash
-npx skills add 1837620622/ad-and-psim-skill
-```
-
-### 方式三：CC Switch
-
-在 CC Switch 的「Skills → 仓库管理 → 添加仓库」中填写：Owner `1837620622`，Name `ad-and-psim-skill`，Branch `main`，Subdirectory `skills`，然后安装两个技能。部分版本只识别根目录下的 SKILL.md，检测不到时改用方式一。
-
-### 方式四：克隆后用 Python 安装
+**克隆后用 Python 安装**：
 
 ```bash
 git clone https://github.com/1837620622/ad-and-psim-skill.git
@@ -117,13 +141,13 @@ python scripts/install_skills.py --agent gemini --agent cursor
 python scripts/install_skills.py --link          # 用链接，仓库更新后自动生效
 ```
 
-安装器只替换它自己装过的目录，同名的其他目录会保留并报告冲突。`~/.agents/skills` 是 Codex、Gemini CLI、GitHub Copilot、Cursor、OpenCode 共同读取的目录；Claude Code 读 `~/.claude/skills`。各宿主的目录见 [兼容说明](COMPATIBILITY.md)。装完重新打开 Agent 会话。
+安装器只替换它自己装过的目录，同名的其他目录会保留并报告冲突。同时读取 `~/.agents/skills` 和 `~/.claude/skills` 的宿主（Copilot、Cursor、OpenCode）可能把技能显示两次，不影响使用。各宿主的目录见 [兼容说明](COMPATIBILITY.md)。
 
 ### 检查、更新与卸载
 
 ```bash
 npx -y github:1837620622/ad-and-psim-skill check        # 检查已装的是否为最新
-npx -y github:1837620622/ad-and-psim-skill install      # 更新：重新安装即可覆盖旧版
+npx -y github:1837620622/ad-and-psim-skill              # 更新：再运行一次即可覆盖旧版
 npx -y github:1837620622/ad-and-psim-skill uninstall    # 只删除安装器装过的目录
 ```
 
@@ -171,6 +195,9 @@ python $PSIM/scripts/native_psim.py package $PSIM/assets/rc-filter-plan.json wor
 python $AD/scripts/native_ad.py preflight $AD/assets/rc-filter-plan.json work/preflight-ad
 python $PSIM/scripts/native_psim.py preflight $PSIM/assets/rc-filter-plan.json work/preflight-psim
 python $PSIM/scripts/native_psim.py presim $PSIM/assets/rc-filter-plan.json work/presim.csv
+
+# 把任意波形 CSV 画成曲线并转成 Excel 表（PSIM 原生求解后会自动做这一步）
+python $PSIM/scripts/native_psim.py waveforms work/presim.csv work/curves
 ```
 
 全部命令见 [AD 命令](skills/ad-schematic-layout/references/commands.md) 和 [PSIM 命令](skills/psim-simulation-layout/references/commands.md)。
@@ -182,7 +209,7 @@ psimsch 只能由 PSIM 自己写出（原因见[常见问题](#常见问题)）�
 1. **写计划并预检**：`check plan.json` 到 0 error。文字压字、压线时，用 `plan-edit` 的 `place_text` 操作自动摆到不冲突的位置。
 2. **离线预测**：`preflight plan.json work/preflight` 输出仿原生预览，并对线性电路离线预仿真（`presim.csv`），先确认拓扑、参数和波形量级；`ready_for_windows` 为 true 再往下走。
 3. **打包**：`package plan.json work/psim-kit` 生成构建包；需要回传校验时改用下一节的 `handoff`。
-4. **在 Windows 上双击**：把目录拷到装有 PSIM 和 64 位 Python 3.10+ 的 Windows 电脑，双击 `build.bat`。PSIM 写出 `名称.psimsch`，求解得到 `result\` 里的 SMV 和 CSV，原生出图到 `drawing\`，最后自动打开模型。
+4. **在 Windows 上双击**：把目录拷到装有 PSIM 和 64 位 Python 3.10+ 的 Windows 电脑，双击 `build.bat`。PSIM 写出 `名称.psimsch`，求解得到 `result\` 里的 SMV、CSV、波形曲线 `waveforms.png` 和 Excel 表 `waveforms.xlsx`，原生出图到 `drawing\`，最后自动打开模型。
 5. **出错时**：窗口停住显示原因，每一步的结果写在 `build-report.json`；改好后再双击一次。已有的 psimsch 会沿用，不覆盖你在 PSIM 里改过的内容，只重新求解和出图。
 
 手边没有 Windows 电脑时，可以用 Windows 虚拟机或远程桌面连到装有 PSIM 的电脑。这两种方式本包没有验证过；PSIM 能否在虚拟机里运行、许可能否激活，以 PSIM 的说明为准。
@@ -225,7 +252,7 @@ python $AD/scripts/native_ad.py compare reference/drawing.png work/final-ad/draw
 
 ### MCP
 
-MCP 服务器只用 Python 标准库，提供 32 个工具，可以读取、修改、检查、渲染当前图纸，上 Windows 之前预测结果，准备交给 Windows 的任务，接收并比较原生结果。
+MCP 服务器只用 Python 标准库，提供 33 个工具，可以读取、修改、检查、渲染当前图纸（移动器件、改参数、改文字、自动摆放文字、重新排版），上 Windows 之前预测结果，准备交给 Windows 的任务，接收并比较原生结果，把波形画成曲线和 Excel 表。
 
 ```bash
 claude mcp add ad-psim -- npx -y github:1837620622/ad-and-psim-skill mcp    # Claude Code
@@ -252,7 +279,7 @@ args = ["-y", "github:1837620622/ad-and-psim-skill", "mcp"]
 不想用 Node 时，把命令换成 `python`，参数换成 `["<仓库>/skills/ad-schematic-layout/scripts/mcp_server.py", "--with", "<仓库>/skills/psim-simulation-layout/scripts"]`。
 
 <details>
-<summary>32 个工具一览</summary>
+<summary>33 个工具一览</summary>
 
 | 用途 | AD | PSIM |
 | --- | --- | --- |
@@ -263,6 +290,7 @@ args = ["-y", "github:1837620622/ad-and-psim-skill", "mcp"]
 | 生成 | `ad_create` | `psim_package`、`psim_create` |
 | 预览与截图 | `ad_render`、`ad_screenshot` | `psim_render`、`psim_screenshot` |
 | 原生核验 | `ad_verify` | `psim_simulate`、`psim_measure` |
+| 波形曲线与 Excel 表 | | `psim_waveforms` |
 | 原生出图 | `ad_export` | `psim_export` |
 | 交付 | `ad_deliver` | `psim_deliver` |
 | 交接与接收 | `ad_handoff`、`ad_receive` | `psim_handoff`、`psim_receive` |
@@ -289,16 +317,23 @@ args = ["-y", "github:1837620622/ad-and-psim-skill", "mcp"]
 ## 交付
 
 ```bash
-python $AD/scripts/native_ad.py deliver work/ delivery/ --name 项目名        # AD
-python $PSIM/scripts/native_psim.py deliver work/ delivery/ --name 项目名    # PSIM
+python $AD/scripts/native_ad.py deliver work/ delivery/ --name 项目名 --clean        # AD
+python $PSIM/scripts/native_psim.py deliver work/ delivery/ --name 项目名 --clean    # PSIM
 ```
 
-得到两个目录：
+`delivery/项目名/` 是给客户的目录，只放这些：
 
-- `delivery/项目名/`：给客户，只有工程文件、仿真结果和正式图纸。
-- `delivery/项目名-archive/`：自己留，放计划、脚本、报告、草图和每个文件的 SHA-256 清单。
+| 类别 | 文件 |
+| --- | --- |
+| 模型和工程 | AD 的 `.SchDoc`、`.PrjPcb` 等；PSIM 的 `.psimsch` |
+| 图纸 | 原生导出的原理图 PNG、PDF、SVG、EMF |
+| 仿真结果 | `.smv`、`.csv`、`.xlsx`，以及波形曲线 PNG |
 
-不打压缩包；工作目录里的文件只复制、不移动。
+硬性规则：计划和报告 JSON、Python 等脚本、批处理、日志和压缩包都是制作过程中的文件，一律不进客户目录，`--include` 也放不进去；草图、仿原生预览和离线预仿真也不交付。工作目录里的文件只复制、不移动。
+
+- `--clean`：交付后删除工作目录里的缓存（`__pycache__`、AD 的 `__Previews` 和 `*.SchDocPreview`、`Thumbs.db` 等，软件会自动重建）；History 备份和 `*.bak` 不删。
+- `--archive`：需要自己留底时，另写 `delivery/项目名-archive/`，放过程文件和每个文件的 SHA-256 清单。
+- `--dry-run`：只列出会交付哪些文件，不复制。
 
 ## 常见问题
 
@@ -324,7 +359,7 @@ python $PSIM/scripts/native_psim.py deliver work/ delivery/ --name 项目名    
 
 **会不会改动我原来的工程？**
 
-不会。导入只读取原图纸，修改写到你指定的新文件；PSIM 原生改参数另存副本；交付只复制文件。
+不会。导入只读取原图纸，修改写到你指定的新文件；PSIM 原生改参数另存副本；交付只复制文件，加 `--clean` 时只删除软件会自动重建的缓存。
 
 **仿原生预览能直接给客户吗？**
 
@@ -345,7 +380,7 @@ ad-and-psim-skill/
 ├── skills/
 │   ├── ad-schematic-layout/       # AD 技能：SKILL.md、references/、scripts/、assets/
 │   └── psim-simulation-layout/    # PSIM 技能：同上
-├── bin/cli.mjs                    # npx 入口：install / uninstall / check / mcp / doctor
+├── bin/cli.mjs                    # npx 入口：一条命令安装，以及 install / uninstall / check / mcp / doctor
 ├── scripts/install_skills.py      # Python 安装器
 ├── tests/                         # 可移植测试（不需要 AD、PSIM）
 └── docs/                          # 验证记录和示例图
@@ -355,7 +390,7 @@ ad-and-psim-skill/
 
 ## 验证状态
 
-- 可移植部分（预检、生成、导入与修改、渲染、交接与接收、结果比较、离线预测与预仿真、MCP、安装器）有自动测试，其中仿原生出图直接和仓库里的 Windows 原生导出逐像素比较；CI 矩阵配置 Windows、macOS、Linux 与 Python 3.10/3.13：`python -m unittest discover -s tests -v`。实际运行情况见 Actions 和验证记录。
+- 可移植部分（预检、生成、导入与修改、渲染、交接与接收、结果比较、离线预测与预仿真、MCP、安装器）有自动测试，其中仿原生出图直接和仓库里的 Windows 原生导出逐像素比较；CI 矩阵配置 Windows、macOS、Linux 与 Python 3.10/3.13：`python -m unittest discover -s tests -v`；另有“新手”任务在三个系统上不克隆仓库、用 npx 一条命令安装，再照技能说明把 AD、PSIM 示例做到交付，并检查客户目录里没有 JSON 和脚本。实际运行情况见 Actions 和验证记录。
 - 原生部分在 AD Enterprise 26.4.1、PSIM 2026.0.0.7209 上验证过；记录、边界和待复验的项目见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 - Codex 的技能发现实际验证过；其他宿主按官方文档的目录适配，未逐个运行完整设计任务。
 

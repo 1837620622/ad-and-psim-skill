@@ -18,7 +18,7 @@
 | `verify PRJPCB DIR [--expected JSON]` | 在副本上原生编译，导出逐引脚网表并比较 | Windows + AD |
 | `export SCHDOC DIR [--dpi N]` | 原生导出 EMF 与 PNG，附文字审查 `text_review` | Windows + AD |
 | `run-script PAS PROCEDURE` | 运行本地 DelphiScript | Windows + AD |
-| `deliver WORK OUT [--name N] [--include 通配符]` | 生成客户目录与归档目录 | 任何 |
+| `deliver WORK OUT [--name N] [--include 通配符] [--clean] [--archive] [--dry-run]` | 生成客户目录：只放工程和正式图纸，JSON、脚本、批处理、日志和压缩包一律不放；`--clean` 交付后删除缓存，`--archive` 另写过程归档和 SHA-256 清单 | 任何 |
 | `handoff PLAN DIR [--name N] [--include 文件]` | 准备可交给 Windows 原生执行的完整任务 | 任何 |
 | `receive JOB RETURNED OUT` | 验证接收原生 PNG、工程与结果；不重绘 | 任何 |
 | `compare REFERENCE CANDIDATE [--waveforms]` | 比较文件字节或 CSV 数值，默认零容差 | 任何 |

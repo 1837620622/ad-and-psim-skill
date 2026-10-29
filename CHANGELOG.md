@@ -11,14 +11,16 @@
 - `place_text` 编辑操作（AD、PSIM）：自动把压字、压线、压符号的位号和参数（AD 还包括出图框的）挪到第一个没有冲突的位置；单独挪不开时把附近的文字一起放回标准位置再摆；加 `"all": true` 时先把全部文字放回标准位置，让全图标注统一。
 - 文字贴线检查（AD、PSIM）：文字离导线、引脚或符号不到 2 个单位时报 `TEXT_NEAR_LINE` warning，`place_text` 一并处理。
 - `open` 命令：Windows 上用 AD 打开工程、用 PSIM 打开模型；PSIM 构建包最后自动打开做好的 psimsch（`PSIM_NO_OPEN` 可跳过）。
-- MCP 增加 `ad_preflight`、`psim_preflight`、`psim_presim`，共 32 个工具。
+- 一条命令安装：`npx -y github:1837620622/ad-and-psim-skill` 把两个技能装进 Claude Code、Codex 等 Agent 的技能目录，检查 Python，自动安装可选的 Pillow（Python 3.11+；`--no-pillow` 跳过），再说明本机有没有 AD、PSIM 以及没有时怎么做；没有 Python 时给出各系统的安装办法。再运行一次就是更新，`uninstall` 卸载。
+- 波形曲线和 Excel 表（PSIM）：`simulate` 和 `build.bat` 求解后把原生 CSV 画成 `waveforms.png`（每个信号一格、共用时间轴，按像素列画最小到最大值，尖峰不会被抽稀掉）并转成 `waveforms.xlsx`（全部数据和每个信号的最小、最大、末值、平均、有效值）；其他 CSV 用 `waveforms` 命令。没有 Pillow 时画 SVG；Excel 只用标准库。
+- MCP 增加 `ad_preflight`、`psim_preflight`、`psim_presim`、`psim_waveforms`，共 33 个工具。
 
 ### 改进 / Changed
 
 - 文字互相重叠改为 error：AD、PSIM 预检有文字重叠时不生成文件。
 - PSIM 文字位置按原生规则估算（起点 = AREA 水平中心 - FormatFactor，字号 6/7·|FontSize|），与原生导出实测相差不超过 2 个单位；电源和探头按圆形判断压字，同一文字压同一元件只报一次。
 - PSIM 电阻锯齿和 AD 引脚号位置按原生导出重新标定。
-- 交付时 `preflight/` 目录和 presim 文件进归档目录，不会被当成 PSIM 结果交给客户。
+- 交付硬性规则：客户目录只放模型、原理图、仿真结果（SMV、CSV、XLSX）和波形曲线；计划和报告 JSON、Python 脚本、批处理、日志、压缩包一律不放，`--include` 点名也会被拒绝并给出 warning；`preflight/`、名字带 `presim` 的离线预仿真结果和草图也不交付。默认不再写归档目录，需要留底时加 `--archive`；`--clean` 交付后清理工作目录里的缓存（`__pycache__`、`*.pyc`、`Thumbs.db` 等）。`receive` 得到的 `final/` 可以直接交付。
 - PSIM 构建包的 `build.bat` 改为调用新的 `build` 命令：先查 Python 3.10+；每一步写入 `build-report.json`，失败时窗口停住显示原因；再次双击沿用已有的 psimsch（不覆盖在 PSIM 里改过的模型），只重新求解和出图；模型建好后即使求解或出图失败也会打开。批处理只含 ASCII，中文名称经 `kit.json` 传递。
 - 交接任务的 `run.bat` 先查 Python 3.11+ 和 Pillow，缺少时在启动 AD/PSIM 之前停下并给出安装命令；失败时窗口停住；再次运行时把上次没通过的结果改名为 `native-results.failed-N` 保留，已通过的结果不覆盖。
 - 32 位或 ARM64 的 Python 载入 PSIM 接口失败时，报出当前 Python 的架构并提示改用与 PSIM 相同架构的 Python。
@@ -28,8 +30,9 @@
 - CI 的 Windows 机器上用真实 cmd.exe 运行生成的 `build.bat` 和 `run.bat`：没有 AD/PSIM 或没有 Python 时停下并说明原因、写出报告、重跑保留失败结果；中文名称、带空格路径和带引号的 `PSIM_DIR`/`AD_EXE` 都覆盖。`run.bat` 的报错输出改为 UTF-8，输出被重定向时中文报错不再出错。
 - 两个 SKILL.md 增加“逐步操作（照着做）”：每一步的命令、要看的 JSON 字段、按 finding 代码的处理方法和常见错误表。
 - MCP 的 `--with` 相对路径先按当前目录找，找不到再按 `mcp_server.py` 所在目录找；目录里没有 `mcp_tools.py` 时直接报错，不再启动后崩溃。
+- 测试增加 MCP 改图流程（导入现有图纸、改参数、挪器件、改位号、故意压字后用 `place_text` 修好、重新生成、渲染、交付）；CI 增加“新手”任务：在 Windows、macOS、Linux 和系统自带 Python 上不克隆仓库，用 npx 一条命令安装，再照技能说明从示例计划做到交付，检查客户目录里没有 JSON、脚本和日志，最后卸载。
 
-This release adds a Windows-look renderer calibrated against native exports, offline forecasts (`preflight`), linear PSIM pre-simulation (`presim`), automatic label placement (`place_text`) and one-click opening on Windows. Overlapping text is now an error in both checkers. `build.bat` and `run.bat` check Python first, keep the window open on failure and can simply be run again after a fix. psimsch remains PSIM's closed format: it is written by PSIM itself on Windows and then opened automatically.
+This release adds a Windows-look renderer calibrated against native exports, offline forecasts (`preflight`), linear PSIM pre-simulation (`presim`), automatic label placement (`place_text`) one-click opening on Windows, waveform curves with Excel tables, and a one-command `npx` setup that installs the skills, checks Python and installs Pillow. Delivery folders hold only models, drawings, results and curves, never JSON, scripts or logs. Overlapping text is now an error in both checkers. `build.bat` and `run.bat` check Python first, keep the window open on failure and can simply be run again after a fix. psimsch remains PSIM's closed format: it is written by PSIM itself on Windows and then opened automatically.
 
 ## 1.2.1
 

@@ -8,7 +8,7 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab)
 ![Windows | macOS | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555555)
 ![Agent Skills](https://img.shields.io/badge/Agent%20Skills-2%20skills-6f42c1)
-![MCP](https://img.shields.io/badge/MCP-32%20tools-0a7ea4)
+![MCP](https://img.shields.io/badge/MCP-33%20tools-0a7ea4)
 
 Two skills for AI coding agents: turn a plain-language request into an **editable Altium Designer schematic** or a **PSIM model solved by PSIM itself**, with the layout checked rule by rule against formal drawing practice. The output is native project files, not pictures.
 
@@ -33,9 +33,9 @@ The second row was produced by this package on Linux without AD or PSIM. Compare
 | Preview | Windows-look render (same scale, line widths and ClearType-style text); display the original native PNG returned by Windows | Windows-look render (same framing, native text placement); display the original native PNG returned by Windows |
 | Before Windows | Predict compile warnings, netlist and drawing (`preflight`) | Predict text positions by the native rule; offline pre-simulation of linear circuits (`presim`) |
 | Cross-OS handoff | Prepare on Mac/Linux, compile/export on Windows, verify returned files | Prepare on Mac/Linux, solve on Windows, receive native PNG/SMV/CSV |
-| Native (Windows) | Compile, pin-level netlist comparison, native export, window screenshot | Create, edit parameters, solve, read back waveforms, native export, window screenshot |
+| Native (Windows) | Compile, pin-level netlist comparison, native export, window screenshot | Create, edit parameters, solve, read back waveforms as curves and an Excel sheet, native export, window screenshot |
 | Result checks | Text overlap, clipping and text-over-line review on the native EMF | Same, plus time-weighted power, efficiency, RMS and gate-frequency measurements |
-| Delivery | Customer folder holds only the project and drawings; process files go to an archive; no zip | Customer folder holds only the model and results; process files go to an archive |
+| Delivery | Customer folder holds only the project and final drawings; never JSON, scripts or logs; no zip | Customer folder holds only the model, drawing, results, waveform curves and CSV/XLSX tables |
 
 ## Workflow
 
@@ -45,9 +45,9 @@ The second row was produced by this package on Linux without AD or PSIM. Compare
 4. **Generate**: AD writes SchDoc + PrjPcb; PSIM gets a build kit, or a native model on Windows.
 5. **Native check** (Windows): AD compiles and compares the pin-level netlist; PSIM solves and reads back waveforms.
 6. **Native export**: review text overlap, clipping and text over lines, then look at the drawing.
-7. **Delivery**: a customer folder plus a process archive.
+7. **Delivery**: a customer folder with only models, drawings and results (waveform curves, CSV, XLSX); caches are cleaned.
 
-Every step prints JSON, so the model reads and fixes findings one by one instead of judging "close enough" by itself.
+Every step prints JSON, so the model reads and fixes findings one by one instead of judging "close enough" by itself. That JSON and the scripts are for the work itself and are never handed to the customer.
 
 ## Requirements
 
@@ -56,7 +56,7 @@ Every step prints JSON, so the model reads and fixes findings one by one instead
 | Checks, generation, editing, SVG render, build kit, delivery | Python 3.10+ (standard library only) on Windows, macOS or Linux |
 | PNG render | The Windows-look render needs Pillow plus Times New Roman/Arial (bundled with Windows and macOS) or the width-identical Liberation fonts (Linux: `fonts-liberation`); otherwise resvg-py or Pillow draw a smooth preview. Optional dependencies: `python -m pip install -r requirements-optional.txt` |
 | Windows native EMF to PNG, screenshot conversion | Python 3.11+ and Pillow 13 (included in the optional requirements above) |
-| Installing or running MCP via npx | Node.js 18+ |
+| Installing or running MCP via npx | Node.js 18+ and Git (npx fetches this package from GitHub with Git) |
 | AD compile and native export | Windows + licensed Altium Designer (validated with Enterprise 26.4.1) |
 | PSIM native modeling, solving and export | Windows + licensed PSIM with its Python API (validated with 2026.0.0.7209) |
 
@@ -75,7 +75,7 @@ AD and PSIM run only on Windows. Everything that does not need the software is p
 | AD: write SchDoc + PrjPcb | ✓ | ✓ (identical to files written on Windows) |
 | PSIM: build kit | ✓ | ✓ (copy to a Windows PC with PSIM and double-click `build.bat`) |
 | AD compile/export, PSIM create/solve, window screenshots | ✓ (with the software) | Hand over to a Windows PC with the software |
-| Waveform measurement, delivery | ✓ | ✓ |
+| Waveform measurement, waveform curves and Excel sheets, delivery | ✓ | ✓ |
 
 Mac/Linux does not need AD or PSIM: AD files can be written there directly and are compiled and exported on Windows before delivery; PSIM models and results always come from PSIM on Windows. See [Making PSIM simulation files on a Mac or a PC without PSIM](#making-psim-simulation-files-on-a-mac-or-a-pc-without-psim) and [Prepare on Mac/Linux, run on Windows](#prepare-on-maclinux-run-on-windows) under Usage.
 
@@ -89,25 +89,49 @@ Mac/Linux does not need AD or PSIM: AD files can be written there directly and a
 
 ## Install
 
-### Option 1: npx (recommended)
+### One command (recommended)
+
+First install [Node.js](https://nodejs.org/) 18+, [Git](https://git-scm.com/) and [Python](https://www.python.org/downloads/) 3.10+ (skip what you already have):
 
 ```bash
-npx -y github:1837620622/ad-and-psim-skill install            # into ~/.agents/skills and ~/.claude/skills
+# Windows: run line by line in PowerShell, then close and reopen the terminal
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+winget install Python.Python.3.13
+
+# macOS (Homebrew)
+brew install node git python
+
+# Linux: git and python3 from the distribution; Node.js 18 or newer from nodejs.org (Ubuntu 22.04 ships an older one)
+sudo apt install git python3
+```
+
+Then run:
+
+```bash
+npx -y github:1837620622/ad-and-psim-skill
+```
+
+It does three things and reports each step (in Chinese):
+
+1. **Installs the skills** into `~/.agents/skills` (shared by Codex, Gemini CLI, GitHub Copilot, Cursor and OpenCode) and `~/.claude/skills` (Claude Code), plus ZCode when `~/.zcode` exists.
+2. **Checks Python**. When Pillow is missing (Python 3.11+), it installs the version pinned in `requirements-optional.txt`; PNG drawings and waveform curves use it, and SVG is written without it. When Python is missing, it prints install steps for each system. Add `--no-pillow` to skip the Pillow install.
+3. **Checks Altium Designer and PSIM**: shows where they are installed, or explains what this machine can do and what needs a Windows PC with the software.
+
+Reopen the agent (or start a new session) and describe what you need. To update later, run the same command again.
+
+### Other ways to install
+
+```bash
+npx -y github:1837620622/ad-and-psim-skill install            # skills only (JSON output)
 npx -y github:1837620622/ad-and-psim-skill install --all      # into every known agent directory
-npx -y github:1837620622/ad-and-psim-skill doctor             # check Python, Pillow, AD, PSIM
+npx -y github:1837620622/ad-and-psim-skill doctor             # check Python, Pillow, AD, PSIM only
+npx skills add 1837620622/ad-and-psim-skill                   # Skills CLI
 ```
 
-### Option 2: Skills CLI
+**CC Switch**: open Skills → Repository management → Add repository and enter Owner `1837620622`, Name `ad-and-psim-skill`, Branch `main`, Subdirectory `skills`, then install both skills. Some versions only detect a SKILL.md at the repository root; use the one-command install if nothing is found.
 
-```bash
-npx skills add 1837620622/ad-and-psim-skill
-```
-
-### Option 3: CC Switch
-
-In CC Switch, open Skills → Repository management → Add repository and enter Owner `1837620622`, Name `ad-and-psim-skill`, Branch `main`, Subdirectory `skills`, then install both skills. Some versions only detect a SKILL.md at the repository root; use option 1 if nothing is found.
-
-### Option 4: clone and install with Python
+**Clone and install with Python**:
 
 ```bash
 git clone https://github.com/1837620622/ad-and-psim-skill.git
@@ -117,13 +141,13 @@ python scripts/install_skills.py --agent gemini --agent cursor
 python scripts/install_skills.py --link          # links follow repository updates
 ```
 
-The installers replace only directories they installed; other directories with the same name are kept and reported. `~/.agents/skills` is read by Codex, Gemini CLI, GitHub Copilot, Cursor and OpenCode; Claude Code reads `~/.claude/skills`. See [COMPATIBILITY.md](COMPATIBILITY.md) for every host. Reopen the agent session afterwards.
+The installers replace only directories they installed; other directories with the same name are kept and reported. Hosts that read both `~/.agents/skills` and `~/.claude/skills` (Copilot, Cursor, OpenCode) may list the skills twice, which does no harm. See [COMPATIBILITY.md](COMPATIBILITY.md) for every host.
 
 ### Check, update and uninstall
 
 ```bash
 npx -y github:1837620622/ad-and-psim-skill check        # is the installed copy current?
-npx -y github:1837620622/ad-and-psim-skill install      # update: install again over the old copy
+npx -y github:1837620622/ad-and-psim-skill              # update: run it again over the old copy
 npx -y github:1837620622/ad-and-psim-skill uninstall    # removes only directories the installer created
 ```
 
@@ -174,6 +198,9 @@ python $PSIM/scripts/native_psim.py package $PSIM/assets/rc-filter-plan.json wor
 python $AD/scripts/native_ad.py preflight $AD/assets/rc-filter-plan.json work/preflight-ad
 python $PSIM/scripts/native_psim.py preflight $PSIM/assets/rc-filter-plan.json work/preflight-psim
 python $PSIM/scripts/native_psim.py presim $PSIM/assets/rc-filter-plan.json work/presim.csv
+
+# Turn any waveform CSV into curves and an Excel sheet (done automatically after a native PSIM solve)
+python $PSIM/scripts/native_psim.py waveforms work/presim.csv work/curves
 ```
 
 All commands: [AD commands](skills/ad-schematic-layout/references/commands.md), [PSIM commands](skills/psim-simulation-layout/references/commands.md).
@@ -185,7 +212,7 @@ Only PSIM itself can write a psimsch (see the [FAQ](#faq)), so the work is split
 1. **Write the plan and check it**: run `check plan.json` until it reports 0 errors. When text overlaps text or wires, the `place_text` operation of `plan-edit` moves it to a free position.
 2. **Forecast offline**: `preflight plan.json work/preflight` writes a Windows-look preview and pre-simulates linear circuits (`presim.csv`), so topology, values and waveform levels are checked first. Continue when `ready_for_windows` is true.
 3. **Package**: `package plan.json work/psim-kit` builds the kit; use `handoff` (next section) when the results must come back verified.
-4. **Double-click on Windows**: copy the folder to a Windows PC with PSIM and 64-bit Python 3.10+, then double-click `build.bat`. PSIM writes `name.psimsch`, solves it into SMV and CSV under `result\`, exports the native drawing to `drawing\` and finally opens the model.
+4. **Double-click on Windows**: copy the folder to a Windows PC with PSIM and 64-bit Python 3.10+, then double-click `build.bat`. PSIM writes `name.psimsch`, solves it into SMV, CSV, a waveform plot `waveforms.png` and an Excel sheet `waveforms.xlsx` under `result\`, exports the native drawing to `drawing\` and finally opens the model.
 5. **If something fails**: the window stays open with the reason, and every step is recorded in `build-report.json`. Fix the cause and double-click again. An existing psimsch is reused, so edits made in PSIM are kept; only the solve and the drawing are redone.
 
 Without a Windows PC, a Windows virtual machine or a remote desktop to a PC with PSIM can be used. Neither has been verified with this package; whether PSIM runs and activates its license in a virtual machine is up to PSIM.
@@ -228,7 +255,7 @@ By default every column is compared with zero tolerance, without interpolation o
 
 ### MCP
 
-The MCP server uses only the Python standard library and exposes 32 tools to read, edit, check and render drawings, forecast results before Windows, prepare jobs for Windows, receive native results and compare files or waveforms.
+The MCP server uses only the Python standard library and exposes 33 tools to read, edit, check and render drawings (move parts, change values and text, place labels automatically, re-lay out), forecast results before Windows, prepare jobs for Windows, receive native results, compare files or waveforms, and turn waveforms into curves and Excel sheets.
 
 ```bash
 claude mcp add ad-psim -- npx -y github:1837620622/ad-and-psim-skill mcp    # Claude Code
@@ -255,7 +282,7 @@ args = ["-y", "github:1837620622/ad-and-psim-skill", "mcp"]
 Without Node, use `python` as the command with `["<repo>/skills/ad-schematic-layout/scripts/mcp_server.py", "--with", "<repo>/skills/psim-simulation-layout/scripts"]` as arguments.
 
 <details>
-<summary>All 32 tools</summary>
+<summary>All 33 tools</summary>
 
 | Purpose | AD | PSIM |
 | --- | --- | --- |
@@ -266,6 +293,7 @@ Without Node, use `python` as the command with `["<repo>/skills/ad-schematic-lay
 | Generate | `ad_create` | `psim_package`, `psim_create` |
 | Preview and screenshot | `ad_render`, `ad_screenshot` | `psim_render`, `psim_screenshot` |
 | Native check | `ad_verify` | `psim_simulate`, `psim_measure` |
+| Waveform curves and Excel sheets | | `psim_waveforms` |
 | Native export | `ad_export` | `psim_export` |
 | Delivery | `ad_deliver` | `psim_deliver` |
 | Handoff and reception | `ad_handoff`, `ad_receive` | `psim_handoff`, `psim_receive` |
@@ -292,16 +320,23 @@ On Windows with the software installed, `screenshot` opens AD or PSIM, waits for
 ## Delivery
 
 ```bash
-python $AD/scripts/native_ad.py deliver work/ delivery/ --name ProjectName        # AD
-python $PSIM/scripts/native_psim.py deliver work/ delivery/ --name ProjectName    # PSIM
+python $AD/scripts/native_ad.py deliver work/ delivery/ --name ProjectName --clean        # AD
+python $PSIM/scripts/native_psim.py deliver work/ delivery/ --name ProjectName --clean    # PSIM
 ```
 
-This creates two folders:
+`delivery/ProjectName/` is the customer folder and holds only:
 
-- `delivery/ProjectName/`: for the customer, with only project files, simulation results and final drawings.
-- `delivery/ProjectName-archive/`: for you, with plans, scripts, reports, drafts and a SHA-256 manifest.
+| Kind | Files |
+| --- | --- |
+| Models and projects | AD `.SchDoc`, `.PrjPcb` and the like; PSIM `.psimsch` |
+| Drawings | Native schematic exports in PNG, PDF, SVG, EMF |
+| Simulation results | `.smv`, `.csv`, `.xlsx` and waveform curve PNGs |
 
-No zip is produced; files in the work folder are copied, never moved.
+Hard rule: plan and report JSON, Python and other scripts, batch files, logs and archives are process files and never go into the customer folder, not even with `--include`; drafts, Windows-look previews and offline pre-simulations are not delivered either. Files in the work folder are copied, never moved.
+
+- `--clean`: after delivery, deletes caches in the work folder (`__pycache__`, AD's `__Previews` and `*.SchDocPreview`, `Thumbs.db` and so on, which the software rebuilds); History backups and `*.bak` are kept.
+- `--archive`: when you want your own record, also writes `delivery/ProjectName-archive/` with the process files and a SHA-256 manifest.
+- `--dry-run`: lists what would be delivered without copying.
 
 ## FAQ
 
@@ -327,7 +362,7 @@ It depends on whether the host lets the model read files, run commands and view 
 
 **Will it change my original project?**
 
-No. Import only reads the original drawing and edits go to a file you name; native PSIM parameter edits save a copy; delivery only copies files.
+No. Import only reads the original drawing and edits go to a file you name; native PSIM parameter edits save a copy; delivery only copies files, and `--clean` deletes only caches the software rebuilds.
 
 **Can I send the Windows-look render to a customer?**
 
@@ -348,7 +383,7 @@ ad-and-psim-skill/
 ├── skills/
 │   ├── ad-schematic-layout/       # AD skill: SKILL.md, references/, scripts/, assets/
 │   └── psim-simulation-layout/    # PSIM skill: same structure
-├── bin/cli.mjs                    # npx entry: install / uninstall / check / mcp / doctor
+├── bin/cli.mjs                    # npx entry: one-command install, plus install / uninstall / check / mcp / doctor
 ├── scripts/install_skills.py      # Python installer
 ├── tests/                         # portable tests (no AD or PSIM needed)
 └── docs/                          # validation record and example images
@@ -358,7 +393,7 @@ Each skill directory is self-contained and works when copied into any agent's sk
 
 ## Validation
 
-- The portable parts (checks, generation, import/editing, rendering, handoff/reception, comparison, offline forecast and pre-simulation, MCP and installers) have automated tests; the Windows-look renderer is compared pixel by pixel with the native exports in the repository. The CI matrix is configured for Windows, macOS and Linux with Python 3.10/3.13: `python -m unittest discover -s tests -v`. See Actions and the validation record for actual runs.
+- The portable parts (checks, generation, import/editing, rendering, handoff/reception, comparison, offline forecast and pre-simulation, MCP and installers) have automated tests; the Windows-look renderer is compared pixel by pixel with the native exports in the repository. The CI matrix is configured for Windows, macOS and Linux with Python 3.10/3.13: `python -m unittest discover -s tests -v`. A separate beginner job on all three systems installs with the single npx command (no clone), follows the skill guides from the example plans to delivery and checks that no JSON or scripts reach the customer folder. See Actions and the validation record for actual runs.
 - The native parts were validated with AD Enterprise 26.4.1 and PSIM 2026.0.0.7209; records, limits and pending re-checks are in [docs/VALIDATION.md](docs/VALIDATION.md).
 - Codex skill discovery was checked in practice; other hosts use the directories from their official documentation and were not each run through a full design task.
 

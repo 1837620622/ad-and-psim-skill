@@ -590,11 +590,13 @@ def main():
     item = sub.add_parser('run-script', help='执行本地 DelphiScript')
     item.add_argument('script', type=Path)
     item.add_argument('procedure')
-    item = sub.add_parser('deliver', help='整理交付目录与归档目录')
+    item = sub.add_parser('deliver', help='整理客户交付目录（只放模型、图纸和结果）')
     item.add_argument('work', type=Path)
     item.add_argument('output', type=Path)
     item.add_argument('--name')
     item.add_argument('--include', action='append', default=[])
+    item.add_argument('--archive', action='store_true', help='过程文件另存 <名称>-archive/')
+    item.add_argument('--clean', action='store_true', help='交付后删除工作目录里的缓存')
     args = parser.parse_args()
     try:
         if args.timeout <= 0:
@@ -686,7 +688,9 @@ def main():
         elif command == 'deliver':
             from deliver import deliver
 
-            result = deliver(args.work, args.output, args.name, args.include)
+            result = deliver(
+                args.work, args.output, args.name, args.include, archive=args.archive, clean_cache=args.clean
+            )
         elif command == 'handoff':
             from native_job import prepare
 

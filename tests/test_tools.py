@@ -169,41 +169,97 @@ class PsimCommands(unittest.TestCase):
 
 
 class Delivery(unittest.TestCase):
-    def test_customer_folder_holds_only_project_and_results(self):
+    FILES = {
+        'RC.PrjPcb': 'p',
+        'RC.SchDoc': 's',
+        'drawing/RC.png': 'i',
+        'draft.png': 'd',
+        'plan.json': '{}',
+        'build-report.json': '{}',
+        'build.py': 'x',
+        'build.bat': 'b',
+        'old.zip': 'z',
+        '__pycache__/a.pyc': 'c',
+        'sim/result.smv': 'r',
+        'sim/native.csv': 'c',
+        'sim/waveforms.xlsx': 'x',
+        'sim/waveforms.png': 'w',
+        'preflight/presim.csv': 'p',
+        'model.psimsch': 'm',
+    }
+
+    def work(self, root):
+        work = Path(root, 'work')
+        for name, text in self.FILES.items():
+            Path(work, name).parent.mkdir(parents=True, exist_ok=True)
+            Path(work, name).write_text(text, encoding='utf-8')
+        return work
+
+    def test_customer_folder_holds_only_models_drawings_and_results(self):
         from deliver import deliver
 
         with tempfile.TemporaryDirectory() as root:
-            work = Path(root, 'work')
-            files = {
-                'RC.PrjPcb': 'p',
-                'RC.SchDoc': 's',
-                'drawing/RC.png': 'i',
-                'draft.png': 'd',
-                'plan.json': '{}',
-                'build.py': 'x',
-                'old.zip': 'z',
-                '__pycache__/a.pyc': 'c',
-                'sim/result.smv': 'r',
-                'sim/native.csv': 'c',
-                'model.psimsch': 'm',
-            }
-            for name, text in files.items():
-                Path(work, name).parent.mkdir(parents=True, exist_ok=True)
-                Path(work, name).write_text(text, encoding='utf-8')
+            work = self.work(root)
             result = deliver(work, Path(root, 'out'), 'RC')
+            delivered = [
+                'RC.PrjPcb',
+                'RC.SchDoc',
+                'drawing/RC.png',
+                'model.psimsch',
+                'sim/native.csv',
+                'sim/result.smv',
+                'sim/waveforms.png',
+                'sim/waveforms.xlsx',
+            ]
+            self.assertEqual(sorted(result['delivered']), delivered)
+            customer = Path(root, 'out', 'RC')
             self.assertEqual(
-                sorted(result['delivered']),
-                ['RC.PrjPcb', 'RC.SchDoc', 'drawing/RC.png', 'model.psimsch', 'sim/native.csv', 'sim/result.smv'],
+                sorted(p.relative_to(customer).as_posix() for p in customer.rglob('*') if p.is_file()), delivered
             )
-            archive = Path(root, 'out', 'RC-archive')
+            self.assertEqual(sorted(p.name for p in Path(root, 'out').iterdir()), ['RC'])
+            self.assertIn('plan.json', result['not_delivered'])
+            self.assertEqual(result['sha256']['RC.SchDoc'], hashlib.sha256(b's').hexdigest())
+            self.assertTrue(Path(work, 'RC.SchDoc').is_file() and Path(work, 'plan.json').is_file())
+            with self.assertRaises(FileExistsError):
+                deliver(work, Path(root, 'out'), 'RC')
+
+    def test_include_cannot_deliver_process_files(self):
+        from deliver import deliver
+
+        with tempfile.TemporaryDirectory() as root:
+            work = self.work(root)
+            Path(work, 'params.txt').write_text('R=1', encoding='utf-8')
+            result = deliver(work, Path(root, 'out'), 'RC', include=['*.json', 'build.*', 'params*.txt'])
+            self.assertIn('params.txt', result['delivered'])
+            self.assertFalse({'plan.json', 'build-report.json', 'build.py', 'build.bat'} & set(result['delivered']))
+            self.assertTrue(any('build-report.json' in w and 'build.py' in w for w in result['warnings']))
+
+    def test_archive_is_opt_in_and_keeps_a_manifest(self):
+        from deliver import deliver
+
+        with tempfile.TemporaryDirectory() as root:
+            result = deliver(self.work(root), Path(root, 'out'), 'RC', archive=True)
+            archive = Path(result['archive'])
+            self.assertEqual(archive, Path(root, 'out', 'RC-archive').resolve())
             self.assertTrue((archive / 'plan.json').is_file() and (archive / 'old.zip').is_file())
-            self.assertFalse(any(p.suffix == '.zip' for p in Path(root, 'out', 'RC').rglob('*')))
             manifest = json.loads((archive / 'manifest.json').read_text(encoding='utf-8'))
             entry = next(f for f in manifest['files'] if f['path'] == 'RC.SchDoc')
             self.assertEqual(entry['sha256'], hashlib.sha256(b's').hexdigest())
-            self.assertTrue(Path(work, 'RC.SchDoc').is_file())
-            with self.assertRaises(FileExistsError):
-                deliver(work, Path(root, 'out'), 'RC')
+
+    def test_clean_removes_only_regenerable_caches(self):
+        from deliver import deliver
+
+        with tempfile.TemporaryDirectory() as root:
+            work = self.work(root)
+            for name in ('.DS_Store', 'Thumbs.db', 'History/RC.~(1).SchDoc', 'RC.SchDoc.bak', '__Previews/RC.prv'):
+                Path(work, name).parent.mkdir(parents=True, exist_ok=True)
+                Path(work, name).write_text('x', encoding='utf-8')
+            result = deliver(work, Path(root, 'out'), 'RC', clean_cache=True)
+            self.assertEqual(sorted(result['cleaned']), ['.DS_Store', 'Thumbs.db', '__Previews/', '__pycache__/'])
+            left = sorted(p.relative_to(work).as_posix() for p in work.rglob('*') if p.is_file())
+            self.assertEqual(
+                left, sorted({*self.FILES, 'History/RC.~(1).SchDoc', 'RC.SchDoc.bak'} - {'__pycache__/a.pyc'})
+            )
 
 
 class McpServer(unittest.TestCase):
@@ -259,7 +315,7 @@ class McpServer(unittest.TestCase):
                     check=False,
                 )
                 self.assertEqual(done.returncode, 0, done.stderr.decode())
-                self.assertEqual(len(json.loads(done.stdout)), 32)
+                self.assertEqual(len(json.loads(done.stdout)), 33)
         done = subprocess.run(
             [sys.executable, str(AD / 'mcp_server.py'), '--with', 'no-such-folder', '--list'],
             capture_output=True,
@@ -294,6 +350,28 @@ class Installers(unittest.TestCase):
             self.assertEqual(done.returncode, 0, done.stderr)
             code, _, _ = run(ROOT / 'scripts/install_skills.py', '--home', home, '--all', '--check')
             self.assertEqual(code, 0)
+
+    @unittest.skipIf(shutil.which('node') is None, 'Node 未安装')
+    def test_one_command_setup_installs_skills_and_checks_the_machine(self):
+        cli = ['node', str(ROOT / 'bin/cli.mjs'), '--home']
+        with tempfile.TemporaryDirectory() as home:
+            Path(home, '.zcode').mkdir()
+            done = subprocess.run([*cli, home, '--json', '--no-pillow'], capture_output=True, check=False)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            report = json.loads(done.stdout)
+            self.assertTrue(report['passed'])
+            folders = {Path(e['entry']).parent.relative_to(home).as_posix() for e in report['skills']['entries']}
+            self.assertEqual(folders, {'.agents/skills', '.claude/skills', '.zcode/skills'})
+            self.assertIn('waveforms', report['psim']['portable_commands'])
+            self.assertIn(report['pillow']['status'], ('present', 'skipped'))
+            for agent in ('universal', 'claude', 'zcode'):
+                self.assertEqual(
+                    run(ROOT / 'scripts/install_skills.py', '--home', home, '--agent', agent, '--check')[0], 0
+                )
+            # 再运行一次就是更新；面向新手的输出是中文步骤而不是 JSON。
+            done = subprocess.run([*cli, home, '--no-pillow'], capture_output=True, check=False)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertIn('安装完成', done.stdout.decode('utf-8'))
 
 
 class ReadmeCommands(unittest.TestCase):

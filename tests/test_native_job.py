@@ -247,9 +247,11 @@ class WindowsKit(unittest.TestCase):
             self.calls.append('simulate')
             folder = Path(folder)
             self.assertFalse((folder / 'result.smv').exists(), '旧结果应在求解前清掉')
+            self.assertFalse((folder / 'waveforms.xlsx').exists(), '旧曲线和表格应在求解前清掉')
             folder.mkdir(exist_ok=True)
             (folder / 'result.smv').write_bytes(b'smv')
             (folder / 'native.csv').write_text('Time\n0\n', encoding='utf-8')
+            (folder / 'waveforms.xlsx').write_bytes(b'xlsx')
             return {'graph': str(folder / 'result.smv')}
 
         def export(psim, source, target):
@@ -315,6 +317,45 @@ class WindowsKit(unittest.TestCase):
         self.assertIn('sys.version_info < (3, 10)', bat)
         self.assertIn('if not defined PSIM_NO_PAUSE pause', bat)
         self.assertIn('goto :stop', bat.split('\n:nopython\n', 1)[1].split('\n:fail\n', 1)[0])
+
+
+class NativeSimulate(unittest.TestCase):
+    """simulate 写出 SMV、CSV 之后，同目录还要有交付用的波形曲线和 XLSX（PSIM 接口用替身）。"""
+
+    def test_simulate_writes_curves_and_workbook_next_to_the_csv(self):
+        psim = load_native_psim()
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__('shutil').rmtree(folder, ignore_errors=True))
+        model = folder / 'model.psimsch'
+        model.write_bytes(b'native')
+        samples = [i * 1e-6 for i in range(100)]
+
+        class Curve:
+            def __init__(self, name, values):
+                self.Name, self.Values, self.Rows = name, values, len(values)
+
+        class Api:
+            def PsimSimulate(self, source, graph, **parameters):  # noqa: N802 - PSIM 接口的名字
+                Path(graph).write_bytes(b'smv')
+                curves = [Curve('Time', samples), Curve('Vout', [10 * (1 - 2.718 ** (-t / 2e-5)) for t in samples])]
+                return type('Result', (), {'Result': 1, 'Graph': curves})()
+
+            def get_psim_version(self):
+                return (2025, 1)
+
+        # 实际运行时 native_psim.py 作为脚本启动，同目录的 waveforms.py 在 sys.path 上。
+        with mock.patch.object(sys, 'path', [str(PSIM), *sys.path]):
+            result = psim.simulate(Api(), model, folder / 'result', {})
+        curves = result['waveforms']
+        self.assertEqual(curves['status'], 'written', curves)
+        self.assertEqual(Path(curves['xlsx']), folder / 'result/waveforms.xlsx')
+        self.assertTrue(Path(curves['plot']).is_file())
+        self.assertAlmostEqual(curves['summary']['Vout']['max'], result_max(folder / 'result/native.csv'))
+
+
+def result_max(path):
+    lines = Path(path).read_text(encoding='utf-8-sig').splitlines()[1:]
+    return max(float(line.split(',')[1]) for line in lines)
 
 
 if __name__ == '__main__':

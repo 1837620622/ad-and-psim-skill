@@ -17,7 +17,7 @@ metadata:
 | 写计划、排版预检、修改计划、仿原生渲染 | ✓ | |
 | 离线预测、线性电路离线预仿真（`preflight`、`presim`） | ✓ | |
 | 生成 Windows 构建包（`build.bat`） | ✓ | |
-| 波形 CSV 测量、整理交付目录 | ✓ | |
+| 波形 CSV 测量、画成曲线并转成 Excel 表、整理交付目录 | ✓ | |
 | 准备交给 Windows 的任务、接收原生 PNG/SMV/CSV、比较结果 | ✓ | |
 | 创建 psimsch、改参数、求解、原生出图、窗口截图 | | ✓ |
 
@@ -32,7 +32,7 @@ psimsch 是 PSIM 的私有二进制格式。macOS/Linux 用 `handoff` 准备可�
 5. **建模。** 有 PSIM 就直接 `create`；没有就 `package`，在 Windows 上双击 `build.bat`：PSIM 写出 psimsch、求解、出图，最后自动打开模型；失败时看 `build-report.json`，改好后再双击，已有模型会沿用。psimsch 是 PSIM 的私有格式，只能由 PSIM 写出。复杂元件先用小电路校准端口和参数，见 [建模与元件校准](references/modeling.md)。
 6. **分阶段求解。** 先看启动和明显异常，再确认稳态，然后做输入/负载扫描和阶跃。时间步长与稳态见 [求解与时间基准](references/solver-and-timebase.md)。
 7. **核验物理量。** 频率从实际波形测；效率只在稳态、方向一致、边界合适时才叫效率。见 [物理量与测量](references/physics-and-measurement.md)。
-8. **出图与交付。** `export` 的 `text_review` 必须通过，再看全图和局部；`deliver` 生成客户目录（模型和结果）和归档目录，不打压缩包。见 [图纸、波形与交付](references/delivery.md)。
+8. **出图与交付。** `export` 的 `text_review` 必须通过，再看全图和局部；`simulate` 已把波形画成 `waveforms.png` 并转成 `waveforms.xlsx`。`deliver --clean` 生成客户目录：只放模型、原理图、仿真结果（SMV、CSV、XLSX）和波形曲线，不放 JSON、脚本和日志，不打压缩包，并清理缓存。见 [图纸、波形与交付](references/delivery.md)。
 
 Mac/Linux 不安装 PSIM；最终图纸与仿真由 Windows 返回。仿原生渲染与 RC 示例的原生导出尺寸相同，线条和文字像素 97.0% 在 1 像素内对齐，用于提前看效果；未标定的元件画成方框，不能冒充原生图形。交接任务在 Windows 运行后会对比离线预仿真与 PSIM 波形。接收原生图和数据、拒收错配结果以及比较容差，见 [交接与结果一致性](references/handoff.md)。
 
@@ -54,7 +54,8 @@ Mac/Linux 不安装 PSIM；最终图纸与仿真由 Windows 返回。仿原生�
    - 本机有 PSIM：`python scripts/native_psim.py create work/plan2.json model.psimsch`，再 `simulate`、`export`。
    - 本机没有 PSIM（Mac、Linux 或未装 PSIM 的 Windows）：`python scripts/native_psim.py package work/plan2.json kit/`，把 `kit/` 整个拷到装有 PSIM 和 64 位 Python 3.10+ 的 Windows 电脑，双击 `build.bat`。它会建模、求解、出图并用 PSIM 打开模型。失败时窗口停住，原因写在 `build-report.json`；改好后再双击即可，已有的模型不会被覆盖。
    - 需要把原生结果校验后拿回来时，用 `handoff` 代替 `package`，Windows 上双击 `run.bat`，拿回 `native-results/` 后运行 `receive`。
-8. **核对结果。** `export` 的 `text_review.passed` 必须为 true；波形用 `scripts/analyze_waveform.py` 测量。最后 `deliver` 整理交付目录。
+8. **核对结果。** `export` 的 `text_review.passed` 必须为 true；波形用 `scripts/analyze_waveform.py` 测量。`simulate`（或 `build.bat`）的结果目录里已有 `waveforms.png` 和 `waveforms.xlsx`：打开 PNG 看曲线是否合理；`simulate` 结果里 `waveforms.status` 不是 `written` 时，按 `error` 修好后运行 `waveforms result/native.csv result/` 补上。
+9. **交付。** 构建包：在 Windows 上运行过 `build.bat` 的 `kit/` 里已有模型、`result/` 和 `drawing/`，运行 `python scripts/native_psim.py deliver kit/ delivery/ --name 项目名 --clean`；用 `handoff` 的，对 `receive` 得到的 `final/` 运行同样的命令；直接在 Windows 上做的，把模型、`result/` 和原生出图放进同一个工作目录再交付。客户目录只能有 psimsch、DLL、原理图、SMV、CSV、XLSX 和波形曲线 PNG；看结果里的 `delivered`，出现 `.json`、`.py`、`.bat`、`.log` 就是出错了。不要另外拷文件进客户目录。
 
 常见错误：
 
@@ -78,12 +79,13 @@ python scripts/native_psim.py plan-edit plan.json ops.json new.json
 python scripts/native_psim.py render plan.json view.png         # 仿原生渲染（无需 PSIM）
 python scripts/native_psim.py package plan.json kit/            # Windows 构建包
 python scripts/native_psim.py create plan.json model.psimsch    # Windows + PSIM
-python scripts/native_psim.py simulate model.psimsch result/
+python scripts/native_psim.py simulate model.psimsch result/    # 同时写出 waveforms.png 和 waveforms.xlsx
 python scripts/native_psim.py export model.psimsch drawing/model.emf
 python scripts/native_psim.py screenshot model.psimsch shot.png # 有 PSIM 截窗口，否则渲染计划
 python scripts/native_psim.py open model.psimsch                # Windows：用 PSIM 打开模型
 python scripts/analyze_waveform.py result/native.csv --pin Pin --pout Pout --end 0.5 --fundamental-hz 50 --cycles 5
-python scripts/native_psim.py deliver work/ delivery/ --name 项目名
+python scripts/native_psim.py waveforms result/native.csv result/  # 任意波形 CSV → 曲线 PNG + Excel 表
+python scripts/native_psim.py deliver work/ delivery/ --name 项目名 --clean
 python scripts/native_psim.py handoff plan.json job/
 python scripts/native_psim.py receive job/ returned-results/ final/
 python scripts/native_psim.py compare reference.csv final/waveforms/native.csv --waveforms
@@ -98,6 +100,7 @@ python scripts/native_psim.py compare reference.csv final/waveforms/native.csv -
 - Time 列只证明输出采样间隔，没有其他证据时不能当作求解器内部步长。
 - 便携渲染只用于调试；对外的图用 PSIM 原生出图或真实窗口截图，并说明来源。
 - 功能级仿真、原生求解、旧版本实测、硬件测量分开表述。
+- 客户目录只放模型、图纸和仿真结果（曲线、CSV、XLSX）。计划和报告 JSON、Python 脚本、批处理、日志都是过程文件，一律不交付；交付用 `deliver`，不要手工拷贝。
 
 ## 参考资料
 
