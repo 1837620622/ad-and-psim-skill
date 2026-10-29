@@ -16,11 +16,11 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ['3.10', '3.13']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '24'
       - name: Install optional dependencies
@@ -42,30 +42,38 @@ jobs:
 
   # 新手的实际用法：不克隆仓库，一条 npx 命令装好，再照技能说明做一遍。
   beginner:
-    name: beginner (${{ matrix.os }}, Python ${{ matrix.python }})
+    name: beginner (${{ matrix.os }}, Python ${{ matrix.python }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python: ['3.13']
+        node: ['22']
         include:
           # 系统自带、不允许 pip 安装的 Python：Pillow 装不上时安装仍然完成，出图改写 SVG
           - os: ubuntu-latest
             python: system
+            node: '22'
+          # Node 24 自带 npm 11
+          - os: ubuntu-latest
+            python: '3.13'
+            node: '24'
     defaults:
       run:
         shell: bash
     env:
-      PACKAGE: github:${{ github.repository }}#${{ github.event.pull_request.head.sha || github.sha }}
+      # 和 README 一样按分支安装：npm 10 用完整提交号安装 GitHub 包会报 GitFetcher requires an Arborist constructor
+      PACKAGE: github:${{ github.event.pull_request.head.repo.full_name || github.repository }}#${{ github.head_ref || github.ref_name }}
+      EXPECTED: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: matrix.python != 'system'
         with:
           python-version: ${{ matrix.python }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
       - name: Empty home and work folders
         run: |
           base="$RUNNER_TEMP"
@@ -81,6 +89,13 @@ jobs:
             test -f "$SKILLS_HOME/$host/skills/ad-schematic-layout/SKILL.md"
             test -f "$SKILLS_HOME/$host/skills/psim-simulation-layout/SKILL.md"
           done
+          cache=$(npm config get cache)
+          if command -v cygpath > /dev/null; then cache=$(cygpath -u "$cache"); fi
+          if grep -qs "$EXPECTED" "$cache"/_npx/*/package-lock.json; then
+            echo "npx 安装的是本次提交 $EXPECTED"
+          else
+            echo "::warning::npx 安装的不是本次提交 $EXPECTED（分支上已有更新的提交）"
+          fi
       - name: Rerun (update), check and doctor
         working-directory: ${{ runner.temp }}/work
         run: |

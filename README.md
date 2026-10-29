@@ -153,6 +153,8 @@ npx -y github:1837620622/ad-and-psim-skill uninstall    # 只删除安装器装�
 
 用 Python 安装器时对应 `--check` 和 `--uninstall`；用 `--link` 安装的，`git pull` 后即为最新。
 
+要装某个分支或标签，在名字后面加 `#分支名`，例如 `npx -y github:1837620622/ad-and-psim-skill#main`。npm 10（Node 22 自带）用 40 位完整提交号安装 GitHub 包会报 `GitFetcher requires an Arborist constructor`，这是 npm 的问题：改用分支或标签，或升级到 npm 11（`npm install -g npm@11`）。
+
 ## 使用
 
 ### 直接说需求

@@ -153,6 +153,8 @@ npx -y github:1837620622/ad-and-psim-skill uninstall    # removes only directori
 
 The Python installer has `--check` and `--uninstall`; with `--link`, a `git pull` is enough to update.
 
+To install a branch or tag, append `#name`, for example `npx -y github:1837620622/ad-and-psim-skill#main`. npm 10 (bundled with Node 22) fails on a full 40-character commit hash for a GitHub package with `GitFetcher requires an Arborist constructor`. That is an npm issue: use a branch or tag, or upgrade to npm 11 (`npm install -g npm@11`).
+
 ## Usage
 
 ### Ask in plain language
