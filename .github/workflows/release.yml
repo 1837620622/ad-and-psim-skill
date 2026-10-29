@@ -3,6 +3,11 @@ name: release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要发布的版本号（如 1.3.0）；在所选分支的最新提交上打 v 标签'
+        required: true
 
 permissions:
   contents: write
@@ -10,11 +15,13 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
     steps:
       - uses: actions/checkout@v5
       - name: Check version numbers and take the notes from the changelog
         run: |
-          python3 - "${GITHUB_REF_NAME#v}" > notes.md <<'EOF'
+          python3 - "${TAG#v}" > notes.md <<'EOF'
           import json, os, pathlib, re, sys
 
           version = sys.argv[1]
@@ -33,16 +40,23 @@ jobs:
           print('\n### 安装这个版本 / Install this version\n')
           print(f'```bash\nnpx -y github:{os.environ["GITHUB_REPOSITORY"]}#v{version}\n```')
           EOF
+      - name: Tag the commit (manual run)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "标签 $TAG 已存在"; exit 1
+          fi
+          git tag "$TAG" && git push origin "refs/tags/$TAG"
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - name: The tag installs with npx on npm 10
         run: |
           npm --version
-          npx -y "github:$GITHUB_REPOSITORY#$GITHUB_REF_NAME" install --home "$RUNNER_TEMP/home"
-          npx -y "github:$GITHUB_REPOSITORY#$GITHUB_REF_NAME" check --home "$RUNNER_TEMP/home"
+          npx -y "github:$GITHUB_REPOSITORY#$TAG" install --home "$RUNNER_TEMP/home"
+          npx -y "github:$GITHUB_REPOSITORY#$TAG" check --home "$RUNNER_TEMP/home"
           test -f "$RUNNER_TEMP/home/.claude/skills/psim-simulation-layout/SKILL.md"
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+        run: gh release create "$TAG" --title "$TAG" --notes-file notes.md --verify-tag
