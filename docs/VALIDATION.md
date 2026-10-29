@@ -64,7 +64,8 @@ python -m unittest discover -s tests -v
 - 离线预仿真：RC 阶跃与解析解最大偏差小于 1e-4 V（实测约 3e-5 V），RL 阶跃电流、RC 正弦稳态幅值与解析值一致；遇到开关等元件拒绝；步长过粗报出。
 - 离线预测：AD 示例预测 0 个编译 error、4 条缺少封装的 warning，与 Windows 实测一致；PSIM 示例预检、预览和预仿真都通过；离线预仿真与原生波形的对照记录。
 - 交付：客户目录只有模型、原理图、仿真结果和波形曲线；计划和报告 JSON、脚本、批处理、日志、压缩包即使用 `--include` 点名也不进；`preflight/`、presim 文件和草图不交付；默认不写归档，`--archive` 才写；`--clean` 只删缓存，不删 History 和 `*.bak`；`receive` 的 `final/` 可直接交付。
-- 波形曲线和 Excel 表：20 万点里的单个尖峰保留在曲线和统计里；刻度文字（如 `2.5`、`25m`、`Time (ms)`）；XLSX 用标准库读回，每个数值与 CSV 相同，超过行数上限时接着写下一张表；同一输入重复生成的 PNG 和 XLSX 逐字节相同；时间窗和信号选择；时间倒序的 CSV 报错且不留半成品；没有 Pillow 时写 SVG；presim 曲线不交付；`simulate`、构建包和 MCP 都生成。
+- 波形曲线和 Excel 表：20 万点里的单个尖峰保留在曲线和统计里；刻度文字（如 `2.5`、`25m`、`Time (ms)`）；XLSX 用标准库逐格读回，与 CSV 的表头、行号、列位置、文字和数字原文都相同（openpyxl 读出的值也相同），改动任何一格都会被核对发现，超过行数上限时接着写下一张表并带表头，GB18030 编码的 CSV 也可以；同一输入重复生成的 PNG 和 XLSX 逐字节相同；时间窗和信号选择；时间倒序的 CSV 报错且不留半成品；没有 Pillow 时写 SVG；presim 曲线不交付；`simulate`、构建包和 MCP 都生成。
+- 与原始文件对照（PSIM，Linux 上用模拟的 PSIM 接口）：原始 psimsch 用同样参数另行求解后对照，临时目录用完删除；模型改动后报 `different`；原始 CSV 字节相同时为 `byte_identical`，按 7 位小数导出的 CSV 为 `printed_digits_equal`；列不同、文件类型不对或路径越出构建包时报错；对不上时构建失败，Windows 任务的结果不能接收。
 - MCP 改图流程：一个服务器进程里导入现有 SchDoc、改参数、挪器件、改位号，故意把文字压在一起后预检报 `TEXT_OVERLAP`，`place_text` 修到 0 error，重新生成后读回确认改动都在，渲染出 PNG，交付时客户目录只有 PrjPcb 和 SchDoc、缓存被清理；PSIM 同样改参数、挪元件、改文字、自动摆放，再把离线预仿真画成曲线和 Excel 表，生成构建包。
 - 一条命令安装：临时主目录里运行 `bin/cli.mjs`，技能装进各 Agent 的目录（检测到 ZCode 时也装），Python 安装器的检查通过，再运行一次仍然通过。
 - 文件哈希、完整 CSV、零容差与显式容差、时间网格差异和无效数据。

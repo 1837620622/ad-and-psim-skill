@@ -8,7 +8,11 @@ from itertools import zip_longest
 import json
 import math
 from pathlib import Path
+import re
 import sys
+
+# 定位数科学计数法（PSIM、SIMVIEW 文本导出的写法，如 1.2345678E-005）；尾数位数相同才算定位数。
+FIXED = re.compile(r'\s*[+-]?\d\.(\d+)[eEdD][+-]?\d+\s*')
 
 
 def digest(path):
@@ -32,23 +36,43 @@ def compare_files(reference, candidate):
     }
 
 
-@contextmanager
-def table(path):
-    encoding = None
-    for choice in ('utf-8-sig', 'gb18030'):
+def _dialect(path):
+    for encoding in ('utf-8-sig', 'gb18030'):
         try:
-            with Path(path).open(encoding=choice) as probe:
+            with Path(path).open(encoding=encoding) as probe:
                 sample = probe.read(8192)
-            encoding = choice
             break
         except UnicodeDecodeError:
             continue
-    if encoding is None:
+    else:
         raise ValueError('CSV 编码无法识别')
     try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
+        return encoding, csv.Sniffer().sniff(sample, delimiters=',;\t')
     except csv.Error:
-        dialect = csv.excel
+        return encoding, csv.excel
+
+
+def printed_digits(path):
+    """CSV 的全部数字都按同一尾数位数的科学计数法写出时，返回尾数小数位数；否则（如最短往返写法）返回 None。"""
+    encoding, dialect = _dialect(path)
+    digits = None
+    with Path(path).open(encoding=encoding, newline='') as stream:
+        reader = csv.reader(stream, dialect)
+        next(reader, None)
+        for row in reader:
+            for cell in row:
+                if not cell.strip():
+                    continue
+                match = FIXED.fullmatch(cell)
+                if match is None or digits not in (None, len(match[1])):
+                    return None
+                digits = len(match[1])
+    return digits
+
+
+@contextmanager
+def table(path):
+    encoding, dialect = _dialect(path)
     with Path(path).open(encoding=encoding, newline='') as stream:
         reader = csv.reader(stream, dialect)
         header = next(reader, [])
@@ -74,6 +98,12 @@ def compare_waveforms(reference, candidate, *, signals=None, time='Time', atol=0
     if any(not math.isfinite(v) or v < 0 for v in (atol, rtol, time_atol)):
         raise ValueError('容差须为有限非负数')
     result = compare_files(reference, candidate)
+    digits = printed_digits(reference)
+
+    def printed(left, right):
+        """参考只写到有限位数时：候选值按同样的位数写出后与参考相同。"""
+        return digits is not None and float(f'{right:.{digits}e}') == left
+
     with table(reference) as (left_header, left_rows), table(candidate) as (right_header, right_rows):
         if time not in left_header or time not in right_header:
             raise ValueError('两个 CSV 都须有时间列')
@@ -86,7 +116,7 @@ def compare_waveforms(reference, candidate, *, signals=None, time='Time', atol=0
             raise ValueError('待比较的信号列缺失')
         stats = {name: {'max_absolute_error': 0.0, 'mismatched_samples': 0} for name in columns}
         mismatch, count, previous_left, previous_right = [], 0, None, None
-        equal, complete = True, True
+        equal, same_digits, complete = True, True, True
         max_time_error = 0.0
         for left, right in zip_longest(left_rows, right_rows):
             if left is None or right is None:
@@ -100,15 +130,18 @@ def compare_waveforms(reference, candidate, *, signals=None, time='Time', atol=0
             dt = abs(t1 - t2)
             max_time_error = max(max_time_error, dt)
             equal = equal and dt == 0
-            if dt > time_atol:
+            same_digits = same_digits and (dt == 0 or printed(t1, t2))
+            if dt > time_atol and not printed(t1, t2):
                 complete = False
                 if len(mismatch) < 10:
                     mismatch.append({'sample': count, 'signal': time, 'reference': t1, 'candidate': t2})
             for name in columns:
                 error = abs(left[name] - right[name])
                 equal = equal and error == 0
+                same = error == 0 or printed(left[name], right[name])
+                same_digits = same_digits and same
                 stats[name]['max_absolute_error'] = max(stats[name]['max_absolute_error'], error)
-                if error > atol + rtol * abs(left[name]):
+                if error > atol + rtol * abs(left[name]) and not same:
                     stats[name]['mismatched_samples'] += 1
                     if len(mismatch) < 10:
                         mismatch.append(
@@ -117,11 +150,16 @@ def compare_waveforms(reference, candidate, *, signals=None, time='Time', atol=0
         if count < 2:
             raise ValueError('波形比较至少需要两个样本')
     passed = complete and all(not item['mismatched_samples'] for item in stats.values())
+    if not passed:
+        equivalence = 'different'
+    elif result['passed'] or equal:
+        equivalence = 'byte_identical' if result['passed'] else 'numeric_equal'
+    else:
+        equivalence = 'printed_digits_equal' if same_digits else 'within_tolerance'
     result.update(
         passed=passed,
-        equivalence=('byte_identical' if result['passed'] else 'numeric_equal' if equal else 'within_tolerance')
-        if passed
-        else 'different',
+        equivalence=equivalence,
+        reference_significant_digits=None if digits is None else digits + 1,
         samples_compared=count,
         complete_column_set=not bool(signals),
         tolerances={'absolute': atol, 'relative': rtol, 'time_absolute_s': time_atol},

@@ -12,20 +12,20 @@
 | `preflight PLAN DIR` | 离线预测：排版预检（按原生规则估算文字位置）、仿原生预览、线性电路离线预仿真；`ready_for_windows` 为 false 时返回 1 | 任何 |
 | `presim PLAN OUT.csv` | 离线预仿真 R、L、C、VDC、VSIN、VP 组成的线性电路（节点分析 + 固定步长梯形积分，零初始状态），另报步长和时长检查；其他元件直接拒绝 | 任何 |
 | `render PLAN OUT [--scale N] [--renderer R]` | 计划渲染为 PNG/SVG；PNG 默认仿 Windows 原生出图 | 任何 |
-| `package PLAN DIR [--name N]` | 生成 Windows 构建包 | 任何 |
-| `build KIT [--no-open]` | 构建包入口（`build.bat` 调用）：建模、求解、出图，再用 PSIM 打开；每步写入 `build-report.json` | Windows + PSIM |
+| `package PLAN DIR [--name N] [--reference FILE]` | 生成 Windows 构建包；`--reference` 把原始 psimsch 或 CSV 放进包里的 `reference/`，构建时用它对照 | 任何 |
+| `build KIT [--no-open]` | 构建包入口（`build.bat` 调用）：建模、求解、出图，再用 PSIM 打开；每步写入 `build-report.json`；包里有原始文件时求解结果须与它逐点相同，否则构建失败 | Windows + PSIM |
 | `screenshot SOURCE OUT` | 有 PSIM 且给的是 psimsch：打开软件截窗口；否则渲染计划 | 任何 |
 | `open PSIMSCH` | 用 PSIM 打开模型（不等待窗口关闭）；构建包最后会自动调用 | Windows + PSIM |
-| `waveforms CSV DIR [--name N] [--signal S]... [--start T] [--end T] [--svg]` | 波形 CSV 画成曲线 PNG（每个信号一格、共用时间轴、逐像素列最小-最大包络；无 Pillow 时 SVG），并写出 XLSX（数据表 + 统计表：最小、最大、末值、按时间加权的平均值和有效值）；默认名 `waveforms` | 任何 |
+| `waveforms CSV DIR [--name N] [--signal S]... [--start T] [--end T] [--svg]` | 波形 CSV 画成曲线 PNG（每个信号一格、共用时间轴、逐像素列最小-最大包络；无 Pillow 时 SVG），并写出和 CSV 逐格相同的 XLSX（写完读回核对，见 `xlsx_check`）；`--signal`、`--start`、`--end` 只影响曲线和 `summary`；默认名 `waveforms` | 任何 |
 | `deliver WORK OUT [--name N] [--include 通配符] [--clean] [--archive] [--dry-run]` | 生成客户目录：只放模型、图纸和仿真结果（SMV、CSV、XLSX、波形曲线），JSON、脚本、批处理、日志和压缩包一律不放；`--clean` 交付后删除缓存，`--archive` 另写过程归档和 SHA-256 清单 | 任何 |
-| `handoff PLAN DIR [--name N] [--include 文件]` | 准备可校验的 Windows 原生执行任务 | 任何 |
+| `handoff PLAN DIR [--name N] [--include 文件] [--reference FILE]` | 准备可校验的 Windows 原生执行任务；`--reference` 同 `package` | 任何 |
 | `receive JOB RETURNED OUT` | 校验接收原生 PNG、SMV/CSV 和模型 | 任何 |
 | `compare REFERENCE CANDIDATE [--waveforms]` | 比较文件哈希或原始 CSV 数值，默认零容差 | 任何 |
 | `version` | 原生 API 版本 | Windows + PSIM |
 | `inspect PSIMSCH` | 读取元件类型、名称和参数 | Windows + PSIM |
 | `create PLAN PSIMSCH [--overwrite]` | 按计划创建原生模型（先跑预检） | Windows + PSIM |
 | `edit PSIMSCH CHANGES OUT [--overwrite]` | 改参数并另存，不覆盖输入 | Windows + PSIM |
-| `simulate PSIMSCH DIR [--parameters JSON]` | 原生求解，写出 `result.smv`、`native.csv`，以及波形曲线 `waveforms.png` 和 Excel 表 `waveforms.xlsx`（结果里 `waveforms.status` 为 `written`；画图失败不影响求解结果） | Windows + PSIM |
+| `simulate PSIMSCH DIR [--parameters JSON] [--reference FILE]` | 原生求解，写出 `result.smv`、`native.csv`，以及波形曲线 `waveforms.png` 和与 CSV 逐格相同的 `waveforms.xlsx`（结果里 `waveforms.status` 为 `written`；画图失败不影响求解结果）。`--reference` 给原始 psimsch 时用同样参数另行求解再对照，给 CSV 时直接对照；零容差，结果在 `reference`，不一致时返回 1 | Windows + PSIM |
 | `export PSIMSCH OUT.emf [--dpi N]` | 原生出图：EMF、完整 PNG、去白边 PNG 和 `text_review` | Windows + PSIM |
 | `to-python PSIMSCH OUT.py` | 用本机 ConvertToPythonW 导出可重建脚本（只导出不执行） | Windows + PSIM |
 

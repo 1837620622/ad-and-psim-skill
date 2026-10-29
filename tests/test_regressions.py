@@ -167,6 +167,21 @@ class ResultComparison(unittest.TestCase):
             self.assertFalse(compare_waveforms(reference, target)['passed'])
             self.assertEqual(compare_waveforms(reference, target, atol=0.0001)['equivalence'], 'within_tolerance')
 
+    def test_fixed_digit_reference_is_matched_digit_for_digit_only(self):
+        with tempfile.TemporaryDirectory() as folder:
+            reference, target = self.files(folder, 'Time,Vout\n0,0.123456789\n1,1\n')
+            reference.write_text(
+                'Time,Vout\n0.0000000E+000,1.2345679E-001\n1.0000000E+000,1.0000000E+000\n', encoding='utf-8'
+            )
+            check = compare_waveforms(reference, target)
+            self.assertEqual((check['equivalence'], check['reference_significant_digits']), ('printed_digits_equal', 8))
+            target.write_text('Time,Vout\n0,0.12345674\n1,1\n', encoding='utf-8')
+            self.assertFalse(compare_waveforms(reference, target)['passed'])
+            # 位数不统一（如最短往返写法）时不按位数放宽：0.1 和 0.10000000000000003 是不同的数。
+            reference.write_text('Time,Vout\n0,0.1\n1,1.5e-3\n', encoding='utf-8')
+            target.write_text('Time,Vout\n0,0.10000000000000003\n1,1.5e-3\n', encoding='utf-8')
+            self.assertEqual(compare_waveforms(reference, target)['equivalence'], 'different')
+
     def test_grid_difference_is_not_hidden_with_interpolation(self):
         with tempfile.TemporaryDirectory() as folder:
             reference, target = self.files(folder, 'Time,Vout\n0,0\n1.1,1\n')

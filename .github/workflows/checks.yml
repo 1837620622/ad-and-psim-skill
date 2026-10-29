@@ -166,12 +166,14 @@ jobs:
           "$PY" "$psim" presim work/plan2.json work/presim.csv > presim.json
           "$PY" "$psim" waveforms work/presim.csv work/ > waveforms.json
           test -f work/presim-waveforms.xlsx && test -f "work/presim-waveforms.$ext"
-          "$PY" "$psim" package work/plan2.json kit/ > package.json
-          test -f kit/build.bat
+          cp work/presim.csv work/original.csv
+          "$PY" "$psim" package work/plan2.json kit/ --reference work/original.csv > package.json
+          test -f kit/build.bat && test -f kit/reference/original.csv
           # CI 没有 PSIM：用占位模型和预仿真 CSV 代替 build.bat 的产物，检查交付规则
           mkdir -p kit/result && cp work/presim.csv kit/result/native.csv
           echo placeholder > kit/RC_Filter.psimsch && echo log > kit/build.log
           "$PY" "$psim" waveforms kit/result/native.csv kit/result/ > kit-waveforms.json
+          "$PY" "$psim" compare kit/reference/original.csv kit/result/native.csv --waveforms > compare.json
           "$PY" "$psim" deliver kit/ delivery/ --name RC --clean > deliver.json
           "$PY" -c "
           import json, pathlib
@@ -180,9 +182,13 @@ jobs:
           assert load('edit.json')['layout_check']['errors'] == 0
           assert load('preflight.json')['ready_for_windows'], load('preflight.json')
           assert load('waveforms.json')['summary']
+          assert load('waveforms.json')['xlsx_check']['identical'] and load('kit-waveforms.json')['xlsx_check']['identical']
+          assert load('package.json')['reference'] == 'reference/original.csv', load('package.json')
+          assert load('compare.json')['equivalence'] == 'byte_identical', load('compare.json')
           root = pathlib.Path('delivery/RC')
           files = sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file())
           assert {'RC_Filter.psimsch', 'result/native.csv', 'result/waveforms.xlsx'} <= set(files), files
+          assert not any(name.startswith('reference/') for name in files), files
           "
       - name: Only models, drawings and results are delivered
         working-directory: ${{ runner.temp }}/work

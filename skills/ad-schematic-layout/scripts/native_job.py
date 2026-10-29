@@ -113,9 +113,14 @@ def command(script, arguments, *, cwd, timeout=180, environment=None):
     return {'exit_code': done.returncode, 'result': result, 'stderr': stderr.strip()}
 
 
-def prepare(tool, plan_path, folder, name=None, include=()):
+def prepare(tool, plan_path, folder, name=None, include=(), reference=None):
+    """reference（仅 PSIM）：原始 .psimsch 或 .csv，Windows 求解后与它逐点对照，不一致时任务不通过。"""
     if tool not in ('ad', 'psim') or not (HERE / f'native_{tool}.py').is_file():
         raise ValueError('请从对应 AD 或 PSIM 技能目录准备任务')
+    if reference is not None:
+        reference = Path(reference).resolve()
+        if tool != 'psim' or reference.suffix.lower() not in ('.psimsch', '.csv') or not reference.is_file():
+            raise ValueError('原始文件对照只用于 PSIM，须为存在的 .psimsch 或 .csv')
     plan_path = Path(plan_path).resolve()
     plan = read_json(plan_path)
     if not isinstance(plan, dict):
@@ -138,7 +143,7 @@ def prepare(tool, plan_path, folder, name=None, include=()):
     existed = Path(folder).exists()
     folder = empty_folder(folder)
     try:
-        return _fill_job(tool, folder, plan, name, dependencies, check)
+        return _fill_job(tool, folder, plan, name, dependencies, check, reference)
     except BaseException:
         # 失败时清掉半成品，同一目录可以直接重试；原本就存在的空目录保留。
         for child in folder.iterdir():
@@ -151,7 +156,7 @@ def prepare(tool, plan_path, folder, name=None, include=()):
         raise
 
 
-def _fill_job(tool, folder, plan, name, dependencies, check):
+def _fill_job(tool, folder, plan, name, dependencies, check, reference=None):
     plan['name'] = name
     staged_plan = folder / 'input/plan.json'
     write_json(staged_plan, plan)
@@ -159,6 +164,10 @@ def _fill_job(tool, folder, plan, name, dependencies, check):
         target = safe_file(folder / 'input', relative)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
+    if reference:
+        # 不放进 input/：input/ 会拷进工程和返回结果，原始文件只用来对照。
+        (folder / 'reference').mkdir()
+        shutil.copy2(reference, folder / 'reference' / reference.name)
     scripts = folder / 'tool/scripts'
     scripts.mkdir(parents=True)
     for source in HERE.glob('*.py'):
@@ -214,6 +223,7 @@ def _fill_job(tool, folder, plan, name, dependencies, check):
             if key in forecast
         },
         'portable_preview': {'path': 'preview.render.svg', 'source': 'portable_render', 'native_verified': False},
+        'reference': f'reference/{reference.name}' if reference else None,
         'files': inventory(folder),
     }
     write_json(folder / REQUEST, request)
@@ -304,6 +314,10 @@ def run(job, *, ad_exe=None, psim_dir=None, timeout=180):
         record['stage'] = label
         report['stages'].append(record)
         if record['exit_code']:
+            check = record['result'].get('reference') if isinstance(record['result'], dict) else None
+            if isinstance(check, dict) and check.get('passed') is False:
+                report['reference'] = check
+                raise RuntimeError(f'仿真结果与原始文件不一致：{check.get("reason") or check.get("equivalence")}')
             raise RuntimeError(f'原生阶段未通过：{label}')
         return record['result']
 
@@ -333,7 +347,11 @@ def run(job, *, ad_exe=None, psim_dir=None, timeout=180):
             report['solver'] = stage('version', ['version'])
             schematic = project / f'{name}.psimsch'
             stage('create', ['create', plan, schematic])
-            simulated = stage('simulate', ['simulate', schematic, output / 'waveforms'])
+            reference = request.get('reference')
+            reference = ['--reference', safe_file(job, reference)] if reference else []
+            simulated = stage('simulate', ['simulate', schematic, output / 'waveforms', *reference])
+            if reference:
+                report['reference'] = simulated['reference']
             report['forecast'] = _forecast_psim(job / 'preflight/presim.csv', simulated)
             picture = stage('export', ['export', schematic, output / f'drawing/{name}.emf'])
         if not picture.get('text_review', {}).get('passed'):
@@ -396,6 +414,8 @@ def receive(job, returned, output):
         raise ValueError('Windows 原生任务未通过，不能作为已验证结果接收')
     if report.get('request_sha256') != digest(job / REQUEST) or report.get('plan_sha256') != request['plan_sha256']:
         raise ValueError('返回结果不属于这份请求或计划')
+    if request.get('reference') and not (report.get('reference') or {}).get('passed'):
+        raise ValueError('这份任务要求与原始文件对照，返回结果没有通过对照')
     verify_files(returned, report['files'])
     preview = report.get('native_preview', {})
     relative = preview.get('path')
@@ -422,7 +442,7 @@ def receive(job, returned, output):
     shutil.copy2(returned / RESULT, output / RESULT)
     shutil.copy2(job / REQUEST, output / REQUEST)
     verify_files(output, report['files'])
-    return {
+    received = {
         'passed': True,
         'received': str(output),
         'png': str(safe_file(output, relative)),
@@ -431,6 +451,9 @@ def receive(job, returned, output):
         'preview_bytes_identical': digest(safe_file(output, relative)) == preview['sha256'],
         'result_manifest': str(output / RESULT),
     }
+    if request.get('reference'):
+        received['reference'] = report['reference']
+    return received
 
 
 def main(argv=None):
@@ -442,6 +465,7 @@ def main(argv=None):
     item.add_argument('folder', type=Path)
     item.add_argument('--name')
     item.add_argument('--include', action='append', default=[])
+    item.add_argument('--reference', type=Path, help='PSIM：原始 .psimsch 或 .csv，Windows 求解后与它逐点对照')
     item = sub.add_parser('run')
     item.add_argument('job', type=Path)
     item.add_argument('--ad-exe', type=Path)
@@ -454,7 +478,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == 'prepare':
-            result = prepare(args.tool, args.plan, args.folder, args.name, args.include)
+            result = prepare(args.tool, args.plan, args.folder, args.name, args.include, args.reference)
         elif args.command == 'run':
             result = run(args.job, ad_exe=args.ad_exe, psim_dir=args.psim_dir, timeout=args.timeout)
         else:

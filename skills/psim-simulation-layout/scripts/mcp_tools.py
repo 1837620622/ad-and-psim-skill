@@ -11,6 +11,10 @@ def _schema(properties, required=()):
 
 PATH = {'type': 'string', 'description': '文件或目录路径（相对路径按 MCP 服务器的工作目录解析）'}
 PLAN = {'type': 'string', 'description': '建模计划 JSON 文件路径，或直接写 JSON 文本'}
+REFERENCE = {
+    'type': 'string',
+    'description': '原始 .psimsch 或 .csv 路径：求解后与它逐点对照（零容差），不一致时判为未通过',
+}
 RENDER_OPTIONS = {
     'renderer': {'type': 'string', 'enum': ['auto', 'gdi', 'resvg', 'pillow']},
     'font_files': {'type': 'array', 'items': {'type': 'string'}},
@@ -68,7 +72,8 @@ TOOLS = [
     {
         'name': 'psim_handoff',
         'description': 'Prepare an offline Windows execution job from a plan on Mac/Linux/Windows. '
-        'Windows run.bat creates, simulates and exports through the installed PSIM, preserving original data.',
+        'Windows run.bat creates, simulates and exports through the installed PSIM, preserving original data. '
+        'With reference, the run fails unless the simulation matches that original model or CSV exactly.',
         'script': 'native_job.py',
         'schema': _schema(
             {
@@ -76,6 +81,7 @@ TOOLS = [
                 'folder': PATH,
                 'name': {'type': 'string'},
                 'include': {'type': 'array', 'items': {'type': 'string'}},
+                'reference': REFERENCE,
             },
             ['plan', 'folder'],
         ),
@@ -86,6 +92,7 @@ TOOLS = [
             a['folder'],
             *_optional(a, '--name', 'name'),
             *_repeat(a, '--include', 'include'),
+            *_optional(a, '--reference', 'reference'),
         ],
     },
     {
@@ -189,9 +196,18 @@ TOOLS = [
     {
         'name': 'psim_package',
         'description': 'Any OS: build a Windows kit (plan, tools, build.bat). On a Windows PC with PSIM, '
-        'double-clicking build.bat makes PSIM write the native psimsch, solve it and export the drawing.',
-        'schema': _schema({'plan': PLAN, 'folder': PATH, 'name': {'type': 'string'}}, ['plan', 'folder']),
-        'args': lambda a, m: ['package', m(a['plan']), a['folder'], *_optional(a, '--name', 'name')],
+        'double-clicking build.bat makes PSIM write the native psimsch, solve it and export the drawing. '
+        'With reference, the build fails unless the simulation matches that original model or CSV exactly.',
+        'schema': _schema(
+            {'plan': PLAN, 'folder': PATH, 'name': {'type': 'string'}, 'reference': REFERENCE}, ['plan', 'folder']
+        ),
+        'args': lambda a, m: [
+            'package',
+            m(a['plan']),
+            a['folder'],
+            *_optional(a, '--name', 'name'),
+            *_optional(a, '--reference', 'reference'),
+        ],
     },
     {
         'name': 'psim_screenshot',
@@ -225,9 +241,16 @@ TOOLS = [
     {
         'name': 'psim_simulate',
         'description': 'Windows + PSIM: run the native solver, save result.smv and native.csv, plus '
-        'waveforms.png curves and waveforms.xlsx drawn from that CSV.',
+        'waveforms.png curves and waveforms.xlsx (a cell-by-cell copy of that CSV, read back and checked). '
+        'With reference (the original .psimsch, solved again with the same parameters, or its CSV), every sample '
+        'is compared with zero tolerance and the call fails on any difference.',
         'schema': _schema(
-            {'source': PATH, 'folder': PATH, 'parameters': {'type': 'string', 'description': '可选的求解参数 JSON'}},
+            {
+                'source': PATH,
+                'folder': PATH,
+                'parameters': {'type': 'string', 'description': '可选的求解参数 JSON'},
+                'reference': REFERENCE,
+            },
             ['source', 'folder'],
         ),
         'args': lambda a, m: [
@@ -235,6 +258,7 @@ TOOLS = [
             a['source'],
             a['folder'],
             *(['--parameters', m(a['parameters'])] if a.get('parameters') else []),
+            *_optional(a, '--reference', 'reference'),
         ],
     },
     {
@@ -276,7 +300,8 @@ TOOLS = [
         'name': 'psim_waveforms',
         'description': 'Any OS: turn a waveform CSV into deliverable curves and a spreadsheet: <name>.png (one '
         'panel per signal, shared time axis, per-pixel min-max envelope so spikes survive; SVG without Pillow) and '
-        '<name>.xlsx (all samples plus a statistics sheet). Drawn from the data, not a SIMVIEW screenshot. '
+        '<name>.xlsx (a cell-by-cell copy of the whole CSV, read back and checked; signals/start/end only shape the '
+        'plot and summary). Drawn from the data, not a SIMVIEW screenshot. '
         'psim_simulate already writes waveforms.png/.xlsx next to native.csv.',
         'schema': _schema(
             {

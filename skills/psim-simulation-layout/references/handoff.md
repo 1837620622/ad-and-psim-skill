@@ -32,6 +32,7 @@ job/
 ├── prepared/               # 准备端生成的 SchDoc/PrjPcb（仅 AD）
 ├── preview.render.svg      # 离线预览；有 Pillow 时另生成仿原生 PNG
 ├── preflight/              # 离线预测：预检报告、仿原生预览、PSIM 离线预仿真 presim.csv
+├── reference/              # 仅 PSIM 且给了 --reference：用来对照的原始文件
 ├── native-request.json     # 输入和工具文件清单
 ├── README.txt
 └── run.bat
@@ -53,6 +54,22 @@ python tool/scripts/native_job.py run . --timeout 600
 - PSIM：用实际 API 建模，原生求解，保留 SMV 与 CSV，再原生导出并检查文字。
 - 任何原生阶段失败都返回非零状态；`text_review.passed=false` 也算失败。失败结果留在原目录供诊断，不能作为已通过结果接收。
 - 原生执行写入 `native-results/`。失败时窗口停住显示原因（设置 `NATIVE_NO_PAUSE` 不停）；改好原因后直接再双击 `run.bat`，上次未通过或中途停下的结果改名为 `native-results.failed-N` 保留。已通过的结果不会被覆盖。修改计划后准备新任务目录，避免混入旧结果。
+
+## 与原始文件对照（PSIM）
+
+要求仿真结果和用户的原始模型或原始结果一模一样时，准备任务或构建包时用 `--reference` 带上原始文件：
+
+```text
+python scripts/native_psim.py handoff plan.json work/job-psim --name RC_Filter --reference 原始模型.psimsch
+python scripts/native_psim.py package plan.json work/kit --name RC_Filter --reference 原始结果.csv
+python scripts/native_psim.py simulate 新模型.psimsch work/result --reference 原始模型.psimsch
+```
+
+- 给 psimsch：在 Windows 上用同样的参数另行求解原始模型（放在临时目录，用完删除），再与新模型的 `native.csv` 对照。
+- 给 CSV：直接与它对照，不重新求解。
+- 对照规则与下面的 `compare --waveforms` 相同：零容差，比较全部列，时间网格和样本数量都要相同；SIMVIEW 按固定位数导出的 CSV 按它写出的位数逐位比较（`printed_digits_equal`）。
+- 结果写在 `reference`：`passed`、`equivalence`，数值不同时 `first_mismatches` 列出最先几处差异，列不一致等无法逐点比较时 `reason` 说明原因。不一致时 `simulate` 返回 1，`build` 和 `run` 都算失败，`receive` 也不接收。
+- 原始文件只用来对照：不进 `input/`、不随结果返回、不进客户交付目录。
 
 ## 接收原图与原始结果
 
@@ -81,6 +98,7 @@ python scripts/native_psim.py compare reference.csv candidate.csv --waveforms --
 | --- | --- |
 | `byte_identical` | 文件 SHA-256 相同 |
 | `numeric_equal` | 文本序列化不同，所比较的时间与信号数值完全相等 |
+| `printed_digits_equal` | 参考 CSV 每个数都按同样的有效位数写成科学计数（SIMVIEW 导出的样式），候选数值按这个位数写出后与参考逐位相同；其他写法的 CSV 不放宽 |
 | `within_tolerance` | 在显式给定的容差内相符，仍有数值差异 |
 | `different` | 时间网格、样本数量或信号不相符 |
 

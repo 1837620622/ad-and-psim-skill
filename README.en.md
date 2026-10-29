@@ -201,7 +201,7 @@ python $AD/scripts/native_ad.py preflight $AD/assets/rc-filter-plan.json work/pr
 python $PSIM/scripts/native_psim.py preflight $PSIM/assets/rc-filter-plan.json work/preflight-psim
 python $PSIM/scripts/native_psim.py presim $PSIM/assets/rc-filter-plan.json work/presim.csv
 
-# Turn any waveform CSV into curves and an Excel sheet (done automatically after a native PSIM solve)
+# Turn any waveform CSV into curves and an Excel sheet identical to it cell by cell (done automatically after a native PSIM solve)
 python $PSIM/scripts/native_psim.py waveforms work/presim.csv work/curves
 ```
 
@@ -213,8 +213,8 @@ Only PSIM itself can write a psimsch (see the [FAQ](#faq)), so the work is split
 
 1. **Write the plan and check it**: run `check plan.json` until it reports 0 errors. When text overlaps text or wires, the `place_text` operation of `plan-edit` moves it to a free position.
 2. **Forecast offline**: `preflight plan.json work/preflight` writes a Windows-look preview and pre-simulates linear circuits (`presim.csv`), so topology, values and waveform levels are checked first. Continue when `ready_for_windows` is true.
-3. **Package**: `package plan.json work/psim-kit` builds the kit; use `handoff` (next section) when the results must come back verified.
-4. **Double-click on Windows**: copy the folder to a Windows PC with PSIM and 64-bit Python 3.10+, then double-click `build.bat`. PSIM writes `name.psimsch`, solves it into SMV, CSV, a waveform plot `waveforms.png` and an Excel sheet `waveforms.xlsx` under `result\`, exports the native drawing to `drawing\` and finally opens the model.
+3. **Package**: `package plan.json work/psim-kit` builds the kit; use `handoff` (next section) when the results must come back verified. When the result must match the user's original model or original results exactly, add `--reference original.psimsch` (or the original CSV).
+4. **Double-click on Windows**: copy the folder to a Windows PC with PSIM and 64-bit Python 3.10+, then double-click `build.bat`. PSIM writes `name.psimsch`, solves it into SMV, CSV, a waveform plot `waveforms.png` and an Excel sheet `waveforms.xlsx` under `result\` (identical to the CSV cell by cell, checked by reading it back), exports the native drawing to `drawing\` and finally opens the model. When the kit carries an original file, the result is compared with it point by point at zero tolerance, and any difference fails the build.
 5. **If something fails**: the window stays open with the reason, and every step is recorded in `build-report.json`. Fix the cause and double-click again. An existing psimsch is reused, so edits made in PSIM are kept; only the solve and the drawing are redone.
 
 Without a Windows PC, a Windows virtual machine or a remote desktop to a PC with PSIM can be used. Neither has been verified with this package; whether PSIM runs and activates its license in a virtual machine is up to PSIM.
@@ -253,7 +253,7 @@ python $PSIM/scripts/native_psim.py compare reference/native.csv work/final-psim
 python $AD/scripts/native_ad.py compare reference/drawing.png work/final-ad/drawing/RC_Filter.png
 ```
 
-By default every column is compared with zero tolerance, without interpolation or smoothing. Results come in four levels: `byte_identical` (same file bytes), `numeric_equal` (identical values), `within_tolerance` (within the `--atol` / `--rtol` you give) and `different`. Agreement within a tolerance is not byte identity; different software versions, model libraries and solver settings need their own checks. See [handoff and comparison](skills/ad-schematic-layout/references/handoff.md).
+By default every column is compared with zero tolerance, without interpolation or smoothing. Results come in five levels: `byte_identical` (same file bytes), `numeric_equal` (identical values), `printed_digits_equal` (the reference is a fixed-digit CSV like a SIMVIEW export, and the candidate written to the same digits matches it digit for digit), `within_tolerance` (within the `--atol` / `--rtol` you give) and `different`. Agreement within a tolerance is not byte identity; different software versions, model libraries and solver settings need their own checks. See [handoff and comparison](skills/ad-schematic-layout/references/handoff.md).
 
 ### MCP
 

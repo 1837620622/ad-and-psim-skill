@@ -12,7 +12,9 @@
 - 文字贴线检查（AD、PSIM）：文字离导线、引脚或符号不到 2 个单位时报 `TEXT_NEAR_LINE` warning，`place_text` 一并处理。
 - `open` 命令：Windows 上用 AD 打开工程、用 PSIM 打开模型；PSIM 构建包最后自动打开做好的 psimsch（`PSIM_NO_OPEN` 可跳过）。
 - 一条命令安装：`npx -y github:1837620622/ad-and-psim-skill` 把两个技能装进 Claude Code、Codex 等 Agent 的技能目录，检查 Python，自动安装可选的 Pillow（Python 3.11+；`--no-pillow` 跳过），再说明本机有没有 AD、PSIM 以及没有时怎么做；没有 Python 时给出各系统的安装办法。再运行一次就是更新，`uninstall` 卸载。
-- 波形曲线和 Excel 表（PSIM）：`simulate` 和 `build.bat` 求解后把原生 CSV 画成 `waveforms.png`（每个信号一格、共用时间轴，按像素列画最小到最大值，尖峰不会被抽稀掉）并转成 `waveforms.xlsx`（全部数据和每个信号的最小、最大、末值、平均、有效值）；其他 CSV 用 `waveforms` 命令。没有 Pillow 时画 SVG；Excel 只用标准库。
+- 波形曲线和 Excel 表（PSIM）：`simulate` 和 `build.bat` 求解后把原生 CSV 画成 `waveforms.png`（每个信号一格、共用时间轴，按像素列画最小到最大值，尖峰不会被抽稀掉）并转成 `waveforms.xlsx`；其他 CSV 用 `waveforms` 命令。Excel 表和 CSV 一模一样：表名取 CSV 文件名，表头、行列位置、空行、文字和数字原文都不改，写完逐格读回核对（`xlsx_check`），有任何一格不同就报错并删掉文件。每个信号的最小、最大、末值、平均、有效值在结果的 `summary` 里。没有 Pillow 时画 SVG；Excel 只用标准库。
+- 与原始文件对照（PSIM）：`package`、`handoff`、`simulate` 加 `--reference 原始模型.psimsch` 或 `--reference 原始结果.csv`。给 psimsch 时 Windows 上用同样参数另行求解原始模型，给 CSV 时直接对照；零容差、全部列逐点比较，对不上时 `simulate` 返回 1，`build.bat`、`run.bat` 算失败，`receive` 不接收。原始文件放在 `reference/`，不随结果返回，也不交付。
+- 比较结果增加 `printed_digits_equal`：参考 CSV 每个数都按同样的有效位数写成科学计数（SIMVIEW 导出的样式）时，候选按这个位数写出后与参考逐位相同即算相符；其他写法的 CSV 不放宽。
 - MCP 增加 `ad_preflight`、`psim_preflight`、`psim_presim`、`psim_waveforms`，共 33 个工具。
 
 ### 改进 / Changed
@@ -32,7 +34,7 @@
 - MCP 的 `--with` 相对路径先按当前目录找，找不到再按 `mcp_server.py` 所在目录找；目录里没有 `mcp_tools.py` 时直接报错，不再启动后崩溃。
 - 测试增加 MCP 改图流程（导入现有图纸、改参数、挪器件、改位号、故意压字后用 `place_text` 修好、重新生成、渲染、交付）；CI 增加“新手”任务：在 Windows、macOS、Linux 和系统自带 Python 上不克隆仓库，用 npx 一条命令安装，再照技能说明从示例计划做到交付，检查客户目录里没有 JSON、脚本和日志，最后卸载。
 
-This release adds a Windows-look renderer calibrated against native exports, offline forecasts (`preflight`), linear PSIM pre-simulation (`presim`), automatic label placement (`place_text`) one-click opening on Windows, waveform curves with Excel tables, and a one-command `npx` setup that installs the skills, checks Python and installs Pillow. Delivery folders hold only models, drawings, results and curves, never JSON, scripts or logs. Overlapping text is now an error in both checkers. `build.bat` and `run.bat` check Python first, keep the window open on failure and can simply be run again after a fix. psimsch remains PSIM's closed format: it is written by PSIM itself on Windows and then opened automatically.
+This release adds a Windows-look renderer calibrated against native exports, offline forecasts (`preflight`), linear PSIM pre-simulation (`presim`), automatic label placement (`place_text`) one-click opening on Windows, waveform curves with an Excel copy of the CSV that is checked cell by cell, a zero-tolerance comparison with the user's original PSIM model or results (`--reference`), and a one-command `npx` setup that installs the skills, checks Python and installs Pillow. Delivery folders hold only models, drawings, results and curves, never JSON, scripts or logs. Overlapping text is now an error in both checkers. `build.bat` and `run.bat` check Python first, keep the window open on failure and can simply be run again after a fix. psimsch remains PSIM's closed format: it is written by PSIM itself on Windows and then opened automatically.
 
 ## 1.2.1
 

@@ -198,7 +198,7 @@ python $AD/scripts/native_ad.py preflight $AD/assets/rc-filter-plan.json work/pr
 python $PSIM/scripts/native_psim.py preflight $PSIM/assets/rc-filter-plan.json work/preflight-psim
 python $PSIM/scripts/native_psim.py presim $PSIM/assets/rc-filter-plan.json work/presim.csv
 
-# 把任意波形 CSV 画成曲线并转成 Excel 表（PSIM 原生求解后会自动做这一步）
+# 把任意波形 CSV 画成曲线并转成和 CSV 逐格相同的 Excel 表（PSIM 原生求解后会自动做这一步）
 python $PSIM/scripts/native_psim.py waveforms work/presim.csv work/curves
 ```
 
@@ -210,8 +210,8 @@ psimsch 只能由 PSIM 自己写出（原因见[常见问题](#常见问题)）�
 
 1. **写计划并预检**：`check plan.json` 到 0 error。文字压字、压线时，用 `plan-edit` 的 `place_text` 操作自动摆到不冲突的位置。
 2. **离线预测**：`preflight plan.json work/preflight` 输出仿原生预览，并对线性电路离线预仿真（`presim.csv`），先确认拓扑、参数和波形量级；`ready_for_windows` 为 true 再往下走。
-3. **打包**：`package plan.json work/psim-kit` 生成构建包；需要回传校验时改用下一节的 `handoff`。
-4. **在 Windows 上双击**：把目录拷到装有 PSIM 和 64 位 Python 3.10+ 的 Windows 电脑，双击 `build.bat`。PSIM 写出 `名称.psimsch`，求解得到 `result\` 里的 SMV、CSV、波形曲线 `waveforms.png` 和 Excel 表 `waveforms.xlsx`，原生出图到 `drawing\`，最后自动打开模型。
+3. **打包**：`package plan.json work/psim-kit` 生成构建包；需要回传校验时改用下一节的 `handoff`。要求结果和用户的原始模型或原始结果一模一样时加 `--reference 原始模型.psimsch`（或原始 CSV）。
+4. **在 Windows 上双击**：把目录拷到装有 PSIM 和 64 位 Python 3.10+ 的 Windows 电脑，双击 `build.bat`。PSIM 写出 `名称.psimsch`，求解得到 `result\` 里的 SMV、CSV、波形曲线 `waveforms.png` 和 Excel 表 `waveforms.xlsx`（与 CSV 逐格相同，写完读回核对），原生出图到 `drawing\`，最后自动打开模型。带了原始文件时，求解结果与它零容差逐点对照，对不上就算构建失败。
 5. **出错时**：窗口停住显示原因，每一步的结果写在 `build-report.json`；改好后再双击一次。已有的 psimsch 会沿用，不覆盖你在 PSIM 里改过的内容，只重新求解和出图。
 
 手边没有 Windows 电脑时，可以用 Windows 虚拟机或远程桌面连到装有 PSIM 的电脑。这两种方式本包没有验证过；PSIM 能否在虚拟机里运行、许可能否激活，以 PSIM 的说明为准。
@@ -250,7 +250,7 @@ python $PSIM/scripts/native_psim.py compare reference/native.csv work/final-psim
 python $AD/scripts/native_ad.py compare reference/drawing.png work/final-ad/drawing/RC_Filter.png
 ```
 
-默认零容差、比较全部列，不插值、不平滑。结果分四级：`byte_identical`（文件字节相同）、`numeric_equal`（数值完全相等）、`within_tolerance`（在 `--atol`、`--rtol` 给定的容差内）、`different`。容差内相符不等于字节相同；不同软件版本、模型库或求解设置要分别核验。详见 [交接与比较](skills/ad-schematic-layout/references/handoff.md)。
+默认零容差、比较全部列，不插值、不平滑。结果分五级：`byte_identical`（文件字节相同）、`numeric_equal`（数值完全相等）、`printed_digits_equal`（参考是 SIMVIEW 那样按固定位数导出的 CSV，候选按同样位数写出后逐位相同）、`within_tolerance`（在 `--atol`、`--rtol` 给定的容差内）、`different`。容差内相符不等于字节相同；不同软件版本、模型库或求解设置要分别核验。详见 [交接与比较](skills/ad-schematic-layout/references/handoff.md)。
 
 ### MCP
 

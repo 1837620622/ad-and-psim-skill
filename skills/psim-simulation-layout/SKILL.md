@@ -32,7 +32,7 @@ psimsch 是 PSIM 的私有二进制格式。macOS/Linux 用 `handoff` 准备可�
 5. **建模。** 有 PSIM 就直接 `create`；没有就 `package`，在 Windows 上双击 `build.bat`：PSIM 写出 psimsch、求解、出图，最后自动打开模型；失败时看 `build-report.json`，改好后再双击，已有模型会沿用。psimsch 是 PSIM 的私有格式，只能由 PSIM 写出。复杂元件先用小电路校准端口和参数，见 [建模与元件校准](references/modeling.md)。
 6. **分阶段求解。** 先看启动和明显异常，再确认稳态，然后做输入/负载扫描和阶跃。时间步长与稳态见 [求解与时间基准](references/solver-and-timebase.md)。
 7. **核验物理量。** 频率从实际波形测；效率只在稳态、方向一致、边界合适时才叫效率。见 [物理量与测量](references/physics-and-measurement.md)。
-8. **出图与交付。** `export` 的 `text_review` 必须通过，再看全图和局部；`simulate` 已把波形画成 `waveforms.png` 并转成 `waveforms.xlsx`。`deliver --clean` 生成客户目录：只放模型、原理图、仿真结果（SMV、CSV、XLSX）和波形曲线，不放 JSON、脚本和日志，不打压缩包，并清理缓存。见 [图纸、波形与交付](references/delivery.md)。
+8. **出图与交付。** `export` 的 `text_review` 必须通过，再看全图和局部；`simulate` 已把波形画成 `waveforms.png`，并写出和 `native.csv` 逐格相同的 `waveforms.xlsx`；要求仿真和原始模型或原始结果一模一样时加 `--reference`，见 [交接与结果一致性](references/handoff.md#与原始文件对照psim)。`deliver --clean` 生成客户目录：只放模型、原理图、仿真结果（SMV、CSV、XLSX）和波形曲线，不放 JSON、脚本和日志，不打压缩包，并清理缓存。见 [图纸、波形与交付](references/delivery.md)。
 
 Mac/Linux 不安装 PSIM；最终图纸与仿真由 Windows 返回。仿原生渲染与 RC 示例的原生导出尺寸相同，线条和文字像素 97.0% 在 1 像素内对齐，用于提前看效果；未标定的元件画成方框，不能冒充原生图形。交接任务在 Windows 运行后会对比离线预仿真与 PSIM 波形。接收原生图和数据、拒收错配结果以及比较容差，见 [交接与结果一致性](references/handoff.md)。
 
@@ -54,7 +54,8 @@ Mac/Linux 不安装 PSIM；最终图纸与仿真由 Windows 返回。仿原生�
    - 本机有 PSIM：`python scripts/native_psim.py create work/plan2.json model.psimsch`，再 `simulate`、`export`。
    - 本机没有 PSIM（Mac、Linux 或未装 PSIM 的 Windows）：`python scripts/native_psim.py package work/plan2.json kit/`，把 `kit/` 整个拷到装有 PSIM 和 64 位 Python 3.10+ 的 Windows 电脑，双击 `build.bat`。它会建模、求解、出图并用 PSIM 打开模型。失败时窗口停住，原因写在 `build-report.json`；改好后再双击即可，已有的模型不会被覆盖。
    - 需要把原生结果校验后拿回来时，用 `handoff` 代替 `package`，Windows 上双击 `run.bat`，拿回 `native-results/` 后运行 `receive`。
-8. **核对结果。** `export` 的 `text_review.passed` 必须为 true；波形用 `scripts/analyze_waveform.py` 测量。`simulate`（或 `build.bat`）的结果目录里已有 `waveforms.png` 和 `waveforms.xlsx`：打开 PNG 看曲线是否合理；`simulate` 结果里 `waveforms.status` 不是 `written` 时，按 `error` 修好后运行 `waveforms result/native.csv result/` 补上。
+   - 用户给了原始 psimsch 或原始 CSV、要求结果一模一样时，`package`、`handoff` 或 `simulate` 都加 `--reference 原始文件`。对不上时构建或任务直接失败，原因在 `reference` 里。
+8. **核对结果。** `export` 的 `text_review.passed` 必须为 true；波形用 `scripts/analyze_waveform.py` 测量。`simulate`（或 `build.bat`）的结果目录里已有 `waveforms.png` 和 `waveforms.xlsx`：打开 PNG 看曲线是否合理，`waveforms.xlsx_check.identical` 为 true 表示 Excel 表和 CSV 逐格相同；用了 `--reference` 的，`reference.passed` 必须为 true；`simulate` 结果里 `waveforms.status` 不是 `written` 时，按 `error` 修好后运行 `waveforms result/native.csv result/` 补上。
 9. **交付。** 构建包：在 Windows 上运行过 `build.bat` 的 `kit/` 里已有模型、`result/` 和 `drawing/`，运行 `python scripts/native_psim.py deliver kit/ delivery/ --name 项目名 --clean`；用 `handoff` 的，对 `receive` 得到的 `final/` 运行同样的命令；直接在 Windows 上做的，把模型、`result/` 和原生出图放进同一个工作目录再交付。客户目录只能有 psimsch、DLL、原理图、SMV、CSV、XLSX 和波形曲线 PNG；看结果里的 `delivered`，出现 `.json`、`.py`、`.bat`、`.log` 就是出错了。不要另外拷文件进客户目录。
 
 常见错误：
@@ -80,6 +81,7 @@ python scripts/native_psim.py render plan.json view.png         # 仿原生渲�
 python scripts/native_psim.py package plan.json kit/            # Windows 构建包
 python scripts/native_psim.py create plan.json model.psimsch    # Windows + PSIM
 python scripts/native_psim.py simulate model.psimsch result/    # 同时写出 waveforms.png 和 waveforms.xlsx
+python scripts/native_psim.py simulate model.psimsch result/ --reference 原始模型.psimsch  # 与原始文件逐点对照
 python scripts/native_psim.py export model.psimsch drawing/model.emf
 python scripts/native_psim.py screenshot model.psimsch shot.png # 有 PSIM 截窗口，否则渲染计划
 python scripts/native_psim.py open model.psimsch                # Windows：用 PSIM 打开模型

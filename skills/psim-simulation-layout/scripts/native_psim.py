@@ -19,6 +19,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 
 HERE = Path(__file__).resolve().parent
 PACKAGE_TOOLS = (
@@ -268,7 +269,8 @@ def edit(psim, source, changes, target, overwrite=False):
     return inspect(psim, target)
 
 
-def simulate(psim, source, folder, parameters):
+def _solve(psim, source, folder, parameters):
+    """原生求解：原始 SMV 和逐点读回的 native.csv 写进 folder。"""
     source, folder = Path(source).resolve(), Path(folder).resolve()
     folder.mkdir(parents=True, exist_ok=True)
     graph, table = folder / 'result.smv', folder / 'native.csv'
@@ -309,8 +311,51 @@ def simulate(psim, source, folder, parameters):
         'csv': str(table),
         'columns': names,
         'samples': counts[0],
-        'waveforms': curves_and_table(table, folder),
     }
+
+
+def reference_file(path):
+    path = Path(path).resolve()
+    if path.suffix.lower() not in ('.psimsch', '.csv') or not path.is_file():
+        raise ValueError(f'原始文件须为存在的 .psimsch 或 .csv：{path}')
+    return path
+
+
+def simulate(psim, source, folder, parameters, reference=None):
+    """原生求解，写出 SMV、CSV、曲线和 Excel 表；给了 reference 时与原始文件逐点对照。"""
+    reference = None if reference is None else reference_file(reference)
+    result = _solve(psim, source, folder, parameters)
+    result['waveforms'] = curves_and_table(Path(result['csv']), Path(folder).resolve())
+    if reference is not None:
+        result['reference'] = check_reference(psim, reference, result['csv'], parameters)
+    return result
+
+
+def check_reference(psim, reference, table, parameters):
+    """零容差对照这次求解的波形与原始文件：原始 .psimsch 用同样的参数再求解一次，原始 CSV 直接对照。
+
+    passed 为真表示每个时间点、每个信号都与原始结果相同（或与原始 CSV 写出的全部位数相同）。
+    """
+    from compare_results import compare_waveforms, digest
+
+    reference = reference_file(reference)
+    scratch = Path(tempfile.mkdtemp(prefix='psim-reference-')) if reference.suffix.lower() == '.psimsch' else None
+    try:
+        expected = _solve(psim, reference, scratch, parameters)['csv'] if scratch else reference
+        check = compare_waveforms(expected, table)
+    except (ValueError, RuntimeError) as error:
+        check = {'passed': False, 'equivalence': 'different', 'reason': str(error)}
+    finally:
+        if scratch:
+            shutil.rmtree(scratch, ignore_errors=True)
+    if scratch and 'reference_sha256' in check:
+        check['reference_csv_sha256'] = check['reference_sha256']  # 原始模型按同样参数求解出的 CSV
+    check.update(
+        reference=str(reference),
+        reference_sha256=digest(reference),
+        method='same parameters, re-solved' if scratch else 'csv as given',
+    )
+    return check
 
 
 def curves_and_table(table, folder):
@@ -321,7 +366,7 @@ def curves_and_table(table, folder):
         made = waveforms(table, folder)
     except (ImportError, ValueError, OSError) as error:
         return {'status': 'failed', 'error': f'{type(error).__name__}: {error}'}
-    return {'status': 'written', **{k: made[k] for k in ('plot', 'xlsx', 'summary', 'warnings')}}
+    return {'status': 'written', **{k: made[k] for k in ('plot', 'xlsx', 'xlsx_check', 'summary', 'warnings')}}
 
 
 def to_python(psim, source, target):
@@ -497,6 +542,8 @@ PACKAGE_README = """{name} - PSIM 构建包 / PSIM build kit
 2. 原生求解，结果写入 result\\（SMV、CSV，波形曲线 waveforms.png 和 Excel 表 waveforms.xlsx）；
 3. 原生出图，写入 drawing\\（EMF、PNG）；
 4. 用 PSIM 打开做好的 {name}.psimsch（设置环境变量 PSIM_NO_OPEN 可跳过）。
+Excel 表是 native.csv 的逐格副本，写完会读回核对。有 reference\\ 目录时，求解后与里面的原始模型
+（用同样的参数再求解一次）或原始 CSV 逐点对照，零容差；不一致时判为未通过，见 steps.simulate.reference。
 每一步的结果写在 build-report.json；失败时窗口停住显示原因。再次双击会沿用已有的 {name}.psimsch
 （不覆盖在 PSIM 里改过的模型），重新求解和出图；要按 plan.json 重新建模，先删掉 {name}.psimsch。
 需要 64 位 Python 3.10+；原生 PNG 另需 Python 3.11+ 和 Pillow 13。找不到 PSIM 时先设置环境变量 PSIM_DIR 为安装目录。
@@ -504,7 +551,10 @@ psimsch 是 PSIM 的私有格式，只能由 PSIM 自己写出，所以这一步
 
 On a Windows PC with PSIM, double-click build.bat. It writes {name}.psimsch through PSIM's own API,
 runs the solver (result\\: SMV, CSV, waveforms.png curves and waveforms.xlsx), exports the drawing
-(drawing\\) and opens the model in PSIM (set PSIM_NO_OPEN to skip). Every step is recorded in
+(drawing\\) and opens the model in PSIM (set PSIM_NO_OPEN to skip). The Excel sheet is a cell-by-cell
+copy of native.csv, read back and checked. With a reference\\ folder, the result is compared point by point,
+with zero tolerance, against the original model (solved again with the same parameters) or the original CSV;
+any difference fails the build (see steps.simulate.reference). Every step is recorded in
 build-report.json and the window stays open on failure. Running it again reuses the existing {name}.psimsch
 and redoes the solve and drawing; delete the model to rebuild it from plan.json.
 Needs 64-bit Python 3.10+; native PNG also needs Python 3.11+ and Pillow 13. Set PSIM_DIR if PSIM is not found.
@@ -520,9 +570,14 @@ def build(folder, psim_dir=None, psim=None, open_after=None):
     已有模型时沿用，不覆盖用户在 PSIM 里改过的文件；求解和出图只替换本命令自己写出的文件。
     """
     folder = Path(folder).resolve()
-    name = read_json(folder / KIT)['name']
+    kit = read_json(folder / KIT)
+    name, reference = kit['name'], kit.get('reference')
     if not isinstance(name, str) or not re.fullmatch(r'[\w-]+', name):
         raise ValueError('kit.json 里的名称无效')
+    if reference is not None:
+        if not isinstance(reference, str) or (folder / reference).resolve().parent != folder / 'reference':
+            raise ValueError('kit.json 里的原始文件路径无效')
+        reference = reference_file(folder / reference)
     model, result, drawing = folder / f'{name}.psimsch', folder / 'result', folder / 'drawing'
     report = {'model': str(model), 'passed': False, 'steps': {}}
     if open_after is None:
@@ -544,19 +599,24 @@ def build(folder, psim_dir=None, psim=None, open_after=None):
         else:
             create(psim, plan, model)
             report['steps']['create'] = {'status': 'created', 'layout_check': layout['summary']}
-        step(2, '原生求解')
+        step(2, '原生求解' + ('并与原始文件对照' if reference else ''))
         for old in ('result.smv', 'native.csv', 'waveforms.png', 'waveforms.svg', 'waveforms.xlsx'):
             (result / old).unlink(missing_ok=True)
-        report['steps']['simulate'] = simulate(psim, model, result, {})
+        report['steps']['simulate'] = simulate(psim, model, result, {}, reference)
         step(3, '原生出图')
         for old in (drawing / f'{name}.emf', drawing / f'{name}.png', drawing / f'{name}-compact.png'):
             old.unlink(missing_ok=True)
         report['steps']['export'] = export(psim, model, drawing / f'{name}.emf')
-        report['passed'] = report['steps']['export']['text_review'].get('passed', False)
-        if not report['passed']:
-            report['note'] = (
+        notes = []
+        if not report['steps']['export']['text_review'].get('passed', False):
+            notes.append(
                 '原生出图的文字审查没通过，见 steps.export.text_review；模型已建好，可在 PSIM 里调整后重新出图'
             )
+        if reference and not report['steps']['simulate']['reference']['passed']:
+            notes.append('仿真结果与原始文件不一致，见 steps.simulate.reference')
+        report['passed'] = not notes
+        if notes:
+            report['note'] = '；'.join(notes)
     except Exception as error:
         report['error'] = f'{type(error).__name__}: {error}'
         raise
@@ -571,9 +631,10 @@ def build(folder, psim_dir=None, psim=None, open_after=None):
     return report
 
 
-def package(plan_path, folder, name=None):
-    """生成 Windows 构建包，由目标版本 PSIM 自己写出文件并求解。"""
+def package(plan_path, folder, name=None, reference=None):
+    """生成 Windows 构建包，由目标版本 PSIM 自己写出文件并求解；reference 是要对照的原始 .psimsch 或 .csv。"""
     plan_path, folder = Path(plan_path).resolve(), Path(folder).resolve()
+    reference = None if reference is None else reference_file(reference)
     plan = read_json(plan_path)
     validate(plan)
     check = precheck(plan)
@@ -584,7 +645,12 @@ def package(plan_path, folder, name=None):
         raise FileExistsError(f'目录已存在且非空：{folder}')
     (folder / 'tools').mkdir(parents=True, exist_ok=True)
     write_json(folder / 'plan.json', plan)
-    write_json(folder / KIT, {'name': name})
+    kit = {'name': name}
+    if reference:
+        (folder / 'reference').mkdir()
+        shutil.copy2(reference, folder / 'reference' / reference.name)
+        kit['reference'] = f'reference/{reference.name}'
+    write_json(folder / KIT, kit)
     for tool in PACKAGE_TOOLS:
         shutil.copy2(HERE / tool, folder / 'tools' / tool)
     for filename in ('LICENSE', 'THIRD_PARTY_NOTICES.md'):
@@ -603,6 +669,7 @@ def package(plan_path, folder, name=None):
         'name': name,
         'files': sorted(p.relative_to(folder).as_posix() for p in folder.rglob('*') if p.is_file()),
         'layout_check': check['summary'],
+        'reference': kit.get('reference'),
         'next': '把整个目录拷到装有 PSIM 的 Windows 电脑，双击 build.bat',
     }
 
@@ -705,6 +772,7 @@ def environment(psim_dir=None):
 
 
 # ---------------------------------------------------------------- 命令行 ----
+REFERENCE_HELP = '原始 .psimsch 或 .csv：求解后与它逐点对照（零容差），不一致时退出码为 1'
 
 
 def main():
@@ -717,6 +785,7 @@ def main():
     item.add_argument('folder', type=Path)
     item.add_argument('--name')
     item.add_argument('--include', action='append', default=[])
+    item.add_argument('--reference', type=Path, help=REFERENCE_HELP)
     item = sub.add_parser('receive', help='接收 Windows 原生图纸和结果，校验文件哈希')
     item.add_argument('job', type=Path)
     item.add_argument('returned', type=Path)
@@ -748,14 +817,17 @@ def main():
     item.add_argument('csv', type=Path)
     item.add_argument('folder', type=Path)
     item.add_argument('--name', help='输出文件名（不含扩展名），默认 waveforms')
-    item.add_argument('--signal', action='append', default=[], help='只画、只导出这些信号，可重复')
-    item.add_argument('--start', type=float, help='开始时间 (s)')
-    item.add_argument('--end', type=float, help='结束时间 (s)')
+    item.add_argument(
+        '--signal', action='append', default=[], help='只画这些信号（Excel 表总是 CSV 的全部内容），可重复'
+    )
+    item.add_argument('--start', type=float, help='曲线和统计的开始时间 (s)')
+    item.add_argument('--end', type=float, help='曲线和统计的结束时间 (s)')
     item.add_argument('--svg', action='store_true', help='画 SVG 而不是 PNG')
     item = sub.add_parser('package', help='生成 Windows 一键构建包')
     item.add_argument('plan', type=Path)
     item.add_argument('folder', type=Path)
     item.add_argument('--name')
+    item.add_argument('--reference', type=Path, help=REFERENCE_HELP)
     item = sub.add_parser('build', help='Windows 构建包入口：建模、求解、出图并用 PSIM 打开（build.bat 调用）')
     item.add_argument('folder', type=Path)
     item.add_argument('--no-open', action='store_true', help='不打开 PSIM（也可设置 PSIM_NO_OPEN）')
@@ -790,6 +862,7 @@ def main():
     item.add_argument('source', type=Path)
     item.add_argument('folder', type=Path)
     item.add_argument('--parameters', type=Path)
+    item.add_argument('--reference', type=Path, help=REFERENCE_HELP)
     item = sub.add_parser('export', help='原生出图并审查文字')
     item.add_argument('source', type=Path)
     item.add_argument('target', type=Path)
@@ -810,7 +883,7 @@ def main():
                 raise FileExistsError('报告路径已存在，请使用新的路径')
             inputs = [
                 getattr(args, k, None)
-                for k in ('source', 'plan', 'changes', 'parameters', 'target', 'operations', 'output')
+                for k in ('source', 'plan', 'changes', 'parameters', 'reference', 'target', 'operations', 'output')
             ]
             if args.report.resolve() in [p.resolve() for p in inputs if p]:
                 raise ValueError('报告不能覆盖输入或输出文件')
@@ -858,7 +931,7 @@ def main():
 
             data = waveforms(args.csv, args.folder, args.name, args.signal, args.start, args.end, args.svg)
         elif command == 'package':
-            data = package(args.plan, args.folder, args.name)
+            data = package(args.plan, args.folder, args.name, args.reference)
         elif command == 'build':
             data = build(args.folder, args.psim_dir, open_after=False if args.no_open else None)
             failed = not data['passed']
@@ -875,7 +948,7 @@ def main():
         elif command == 'handoff':
             from native_job import prepare
 
-            data = prepare('psim', args.plan, args.folder, args.name, args.include)
+            data = prepare('psim', args.plan, args.folder, args.name, args.include, args.reference)
         elif command == 'receive':
             from native_job import receive
 
@@ -900,7 +973,9 @@ def main():
             elif command == 'edit':
                 data = edit(psim, args.source, read_json(args.changes), args.target, args.overwrite)
             elif command == 'simulate':
-                data = simulate(psim, args.source, args.folder, read_json(args.parameters) if args.parameters else {})
+                parameters = read_json(args.parameters) if args.parameters else {}
+                data = simulate(psim, args.source, args.folder, parameters, args.reference)
+                failed = 'reference' in data and not data['reference']['passed']
             else:
                 if not 20 <= args.dpi <= 600:
                     raise ValueError('dpi 须在 20–600 之间')

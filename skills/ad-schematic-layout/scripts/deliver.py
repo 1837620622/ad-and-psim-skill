@@ -38,7 +38,7 @@ PROCESS_SUFFIXES = {
 # 调试草图与仿原生预览不交付。
 DRAFT_MARKS = ('draft', '.render', 'preview')
 # 离线预测与预仿真是过程文件（不是原生求解结果）。
-PROCESS_DIRS = {'preflight'}
+PROCESS_DIRS = {'preflight', 'reference'}  # reference/ 是用来对照的原始文件，不是交付物
 PROCESS_MARKS = ('presim',)
 SKIP_DIRS = {'.git', '__pycache__', '__previews', 'history', '.vscode', '.idea', '.pytest_cache', '.ruff_cache'}
 SKIP_FILES = (

@@ -39,8 +39,8 @@ python scripts/native_psim.py waveforms result/native.csv result/ --signal Vo --
 ```
 
 - 曲线：每个信号一格，共用时间轴；每个像素列画该列所有样本的最小值到最大值，尖峰和振荡不会被抽稀掉。坐标刻度用 1、2、2.5、5 的整数倍，单位带 m、µ、k 等前缀。没有 Pillow 时写 `waveforms.svg`。
-- Excel：「波形数据」表是 CSV 的全部数值（超过一张表的行数上限时接着写「波形数据 2」），「统计」表列出每个信号的最小值、最大值、末值，以及按时间加权的平均值和有效值。
-- `--signal` 选信号（不写时全部），`--start`、`--end` 截时间窗；结果里的 `summary` 和 Excel 统计表相同，可以直接引用到报告。
+- Excel：和 CSV 一模一样。表名取 CSV 文件名，表头、行、列、空行位置、文字和数字原文都不改（`1.0000000E-005` 仍写 `1.0000000E-005`，不重新格式化，只去掉数字前多余的 `+` 号；不另加统计表）；超过一张表的行数上限时接着写「名称 (2)」，每张表都带表头。写完逐格读回核对，结果里的 `xlsx_check.identical` 为 true 才算写成，任何一格不同都报错并删掉这个文件。
+- `--signal` 选画哪些信号（不写时全部），`--start`、`--end` 截时间窗；这三项只影响曲线和结果里的 `summary`（最小值、最大值、末值，以及按时间加权的平均值和有效值），Excel 表总是 CSV 的全部内容。
 - 源文件名含 `presim` 时输出名默认是 `presim-waveforms`，交付时自动排除。
 
 ## 交付
@@ -57,7 +57,7 @@ python scripts/native_psim.py deliver work/ delivery/ --name 项目名 --include
 | 图纸 | 原生导出的原理图（PNG、PDF、SVG、EMF） |
 | 仿真结果 | SMV、SSF、CSV、XLSX，波形曲线 `waveforms.png` |
 
-硬性规则：计划和报告 JSON、Python 脚本、批处理、日志、压缩包是制作过程中的文件，一律不进客户目录，`--include` 也放不进去；文件名带 `draft`、`.render`、`preview` 的图、`preflight/` 目录和名字带 `presim` 的离线预仿真结果也不交付。结果里的 `delivered` 和 `not_delivered` 分别列出放进去和没放进去的文件；用 `--include` 点名的过程文件也会被拒绝，并在 `warnings` 里说明。
+硬性规则：计划和报告 JSON、Python 脚本、批处理、日志、压缩包是制作过程中的文件，一律不进客户目录，`--include` 也放不进去；文件名带 `draft`、`.render`、`preview` 的图、`preflight/` 目录、用来对照的 `reference/` 目录和名字带 `presim` 的离线预仿真结果也不交付。结果里的 `delivered` 和 `not_delivered` 分别列出放进去和没放进去的文件；用 `--include` 点名的过程文件也会被拒绝，并在 `warnings` 里说明。
 
 - 工作目录里的文件只复制、不移动；不生成压缩包。
 - `--clean`：交付后删除工作目录里的缓存（`__pycache__`、`*.pyc`、`Thumbs.db` 等），不删 History 备份和 `*.bak`。

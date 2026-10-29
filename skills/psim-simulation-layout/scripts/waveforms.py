@@ -1,6 +1,7 @@
 """把波形 CSV 画成曲线图并转成 Excel 表：PNG 需要 Pillow，没有时写 SVG；XLSX 只用标准库写出。
 
-每个信号一栏，共用时间轴。每个像素列画该列全部样本的最小到最大值（包络），长波形里的尖峰和振荡不会被抽稀掉。
+Excel 表是 CSV 的逐格副本：表头、每一行、每一列和数字原文都不改，写完读回逐格核对，有一格不同就报错。
+曲线每个信号一栏，共用时间轴；每个像素列画该列全部样本的最小到最大值（包络），长波形里的尖峰和振荡不会被抽稀掉。
 曲线是按 CSV 数据绘制的结果图，不是 SIMVIEW 截图。
 """
 
@@ -11,10 +12,16 @@ import itertools
 import json
 import math
 from pathlib import Path
+import re
 import sys
+import xml.etree.ElementTree as ET
 import zipfile
 
 MAX_ROWS = 1_048_576  # Excel 每张表的行数上限（含表头）
+MAX_COLUMNS = 16_384  # Excel 每张表的列数上限
+MAX_TEXT = 32_767  # Excel 单元格的字符数上限
+NUMBER = re.compile(r'[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?')
+CONTROL = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]')  # XML 里不能出现的字符
 MAX_PANELS = 12
 WIDTH, PANEL, GAP, LEFT, RIGHT, TOP, BOTTOM = 1600, 200, 44, 110, 36, 16, 78
 SCALE = 2  # 先按 2 倍画再缩小，线和字有抗锯齿
@@ -44,8 +51,21 @@ def _number(text):
     return value if math.isfinite(value) else None
 
 
-def _columns(path, signals):
-    with open(path, newline='', encoding='utf-8-sig') as stream:
+def _encoding(path):
+    """CSV 编码：UTF-8（可带 BOM）；不是就按 GB18030 读（中文 Excel 另存的 CSV）。"""
+    for choice in ('utf-8-sig', 'gb18030'):
+        try:
+            with open(path, encoding=choice) as stream:
+                while stream.read(1 << 20):
+                    pass
+        except UnicodeDecodeError:
+            continue
+        return choice
+    raise ValueError('CSV 编码无法识别（支持 UTF-8 和 GB18030）')
+
+
+def _columns(path, signals, encoding='utf-8-sig'):
+    with open(path, newline='', encoding=encoding) as stream:
         header = [name.strip() for name in next(csv.reader(stream), [])]
     if len(set(header)) != len(header):
         raise ValueError('CSV 列名重复')
@@ -64,10 +84,10 @@ def _columns(path, signals):
     return header, time, chosen
 
 
-def _rows(path, time, chosen, start, end):
-    """逐行给出 (时间, 各信号值)；跳过时间窗外和时间无效的行，时间须递增。"""
+def _rows(path, time, chosen, start, end, encoding='utf-8-sig'):
+    """逐行给出 (时间, 各信号值)；跳过时间窗外的行。整个文件的时间都须是有限数值且不递减。"""
     previous = None
-    with open(path, newline='', encoding='utf-8-sig') as stream:
+    with open(path, newline='', encoding=encoding) as stream:
         reader = csv.reader(stream)
         next(reader, None)
         for line, row in enumerate(reader, 2):
@@ -118,13 +138,12 @@ REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 PKG = 'http://schemas.openxmlformats.org/package/2006/relationships'
 XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
 STYLES = (
-    f'{XML}<styleSheet xmlns="{NS}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font>'
-    '<font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill '
-    'patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1">'
-    '<border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" '
-    'fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" '
-    'borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>'
-    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
+    f'{XML}<styleSheet xmlns="{NS}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'
+    '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/>'
+    '</fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1">'
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle '
+    'name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
 )
 
 
@@ -137,13 +156,56 @@ def _letters(index):
     return name
 
 
-def _cell(reference, value, style=0):
-    styled = f' s="{style}"' if style else ''
-    if value is None or value == '':
-        return ''
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return f'<c r="{reference}"{styled}><v>{value!r}</v></c>'
-    return f'<c r="{reference}"{styled} t="inlineStr"><is><t xml:space="preserve">{escape(str(value))}</t></is></c>'
+def _column(reference):
+    """单元格引用的列号（从 0 起）：'AB12' → 27。"""
+    number = 0
+    for ch in reference:
+        if not ch.isalpha():
+            break
+        number = number * 26 + ord(ch.upper()) - 64
+    return number - 1
+
+
+def _as_cell(text, line):
+    """CSV 单元格 → None（空）、('n', 数字原文) 或 ('s', 原文字)。数字照抄原文，Excel 读到的数与 CSV 相同。"""
+    if text == '':
+        return None
+    if len(text) > MAX_TEXT or CONTROL.search(text):
+        raise ValueError(f'CSV 第 {line} 行有超过 Excel 字数上限或 XML 不允许的字符，无法原样写进 Excel')
+    literal = text.strip()
+    if NUMBER.fullmatch(literal) and math.isfinite(float(literal)):
+        return 'n', literal.removeprefix('+')
+    return 's', text
+
+
+def _csv_cells(path, encoding):
+    """CSV 原样逐行给出单元格列表：第 1 行是表头；空行是空列表，在表里也占一行。"""
+    with open(path, newline='', encoding=encoding) as stream:
+        for line, row in enumerate(csv.reader(stream), 1):
+            if len(row) > MAX_COLUMNS:
+                raise ValueError(f'CSV 第 {line} 行超过 Excel 的 {MAX_COLUMNS} 列上限')
+            cells = [_as_cell(text, line) for text in row]
+            while cells and cells[-1] is None:
+                cells.pop()
+            yield cells
+
+
+def _cell_xml(reference, cell):
+    kind, text = cell
+    if kind == 'n':
+        return f'<c r="{reference}"><v>{text}</v></c>'
+    text = escape(text, quote=False).replace('\r', '&#13;')  # 裸 \r 会被 XML 解析成 \n
+    return f'<c r="{reference}" t="inlineStr"><is><t xml:space="preserve">{text}</t></is></c>'
+
+
+def _titles(stem):
+    """表名用 CSV 文件名（和 Excel 直接打开 CSV 时一样）；超过行数上限时接着写「名字 (2)」……"""
+    base = re.sub(r'[\[\]:*?/\\]', '_', stem).strip("'") or 'Sheet1'
+    if base.casefold() == 'history':  # Excel 保留的表名
+        base += '_'
+    for number in itertools.count(1):
+        suffix = '' if number == 1 else f' ({number})'
+        yield base[: 31 - len(suffix)] + suffix
 
 
 class Workbook:
@@ -162,26 +224,25 @@ class Workbook:
         with self._open(name) as stream:
             stream.write(text.encode('utf-8'))
 
-    def sheet(self, title, rows, widths=(), frozen=True):
-        """rows 的第一行是表头（加粗）；返回写入的数据行数，不含表头。"""
+    def sheet(self, title, rows, width):
+        """rows 逐行给出单元格列表，第一行是表头（冻结在顶部）；空列表只占一个行号。"""
         number = len(self.sheets) + 1
         self.sheets.append(title)
-        columns = ''.join(
-            f'<col min="{i + 1}" max="{i + 1}" width="{w}" customWidth="1"/>' for i, w in enumerate(widths)
-        )
-        pane = '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' if frozen else ''
-        count = -1
+        letters = [_letters(i) for i in range(width)]
+        columns = f'<cols><col min="1" max="{width}" width="16" customWidth="1"/></cols>' if width else ''
         with self._open(f'xl/worksheets/sheet{number}.xml') as stream:
             stream.write(
-                f'{XML}<worksheet xmlns="{NS}"><sheetViews><sheetView workbookViewId="0">{pane}</sheetView>'
-                f'</sheetViews>{f"<cols>{columns}</cols>" if columns else ""}<sheetData>'.encode()
+                f'{XML}<worksheet xmlns="{NS}"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" '
+                f'topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>{columns}'
+                '<sheetData>'.encode()
             )
-            for count, row in enumerate(rows):
-                line = count + 1
-                cells = ''.join(_cell(f'{_letters(i)}{line}', v, 1 if count == 0 else 0) for i, v in enumerate(row))
-                stream.write(f'<row r="{line}">{cells}</row>'.encode())
+            for line, row in enumerate(rows, 1):
+                while len(letters) < len(row):
+                    letters.append(_letters(len(letters)))
+                cells = ''.join(_cell_xml(f'{letters[i]}{line}', c) for i, c in enumerate(row) if c is not None)
+                if cells:
+                    stream.write(f'<row r="{line}">{cells}</row>'.encode())
             stream.write(b'</sheetData></worksheet>')
-        return max(count, 0)
 
     def close(self):
         n = len(self.sheets)
@@ -222,6 +283,94 @@ class Workbook:
             'vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
         )
         self.archive.close()
+
+
+def copy_to_workbook(source, target, encoding='utf-8-sig'):
+    """把 CSV 逐格写进 XLSX；行数超过 Excel 上限时接着写下一张表，每张表都带表头。返回表名列表。"""
+    rows = _csv_cells(source, encoding)
+    header = next(rows, [])
+    titles = _titles(Path(source).stem)
+    book = Workbook(target)
+    try:
+        while True:
+            chunk = itertools.islice(rows, MAX_ROWS - 1)
+            first = next(chunk, None)
+            if first is None and book.sheets:
+                break
+            body = () if first is None else itertools.chain([first], chunk)
+            book.sheet(next(titles), itertools.chain([header], body), len(header))
+            if first is None:
+                break
+    finally:
+        book.close()
+    return list(book.sheets)
+
+
+def _expected_rows(source, encoding):
+    """按 copy_to_workbook 的分表规则，给出每张表应有的 (表序号, 行号, 单元格)，跳过空行。"""
+    rows = _csv_cells(source, encoding)
+    header = next(rows, [])
+    current = -1
+    for number, cells in enumerate(rows):
+        sheet, line = divmod(number, MAX_ROWS - 1)
+        if sheet != current:
+            current = sheet
+            if header:
+                yield sheet, 1, header
+        if cells:
+            yield sheet, line + 2, cells
+    if current < 0 and header:
+        yield 0, 1, header
+
+
+def _workbook_rows(path):
+    """只用标准库读回 XLSX：按表的顺序逐行给出 (表序号, 行号, 单元格)，跳过空行。"""
+    with zipfile.ZipFile(path) as archive:
+        book = ET.fromstring(archive.read('xl/workbook.xml'))
+        links = ET.fromstring(archive.read('xl/_rels/workbook.xml.rels'))
+        targets = {link.get('Id'): link.get('Target') for link in links}
+        for index, sheet in enumerate(book.find(f'{{{NS}}}sheets')):
+            target = targets[sheet.get(f'{{{REL}}}id')]
+            with archive.open(target.lstrip('/') if target.startswith('/') else f'xl/{target}') as stream:
+                data = None
+                for event, element in ET.iterparse(stream, ('start', 'end')):
+                    if event == 'start':
+                        data = element if element.tag == f'{{{NS}}}sheetData' else data
+                        continue
+                    if element.tag != f'{{{NS}}}row':
+                        continue
+                    cells = []
+                    for cell in element.iter(f'{{{NS}}}c'):
+                        kind, value = cell.get('t', 'n'), cell.find(f'{{{NS}}}v')
+                        if kind == 'inlineStr':
+                            value = ('s', ''.join(t.text or '' for t in cell.iter(f'{{{NS}}}t')))
+                        elif kind == 'n':
+                            value = None if value is None else ('n', value.text)
+                        else:
+                            raise ValueError(f'Excel 表里有不该出现的单元格类型：{kind}')
+                        column = _column(cell.get('r'))
+                        cells.extend([None] * (column + 1 - len(cells)))
+                        cells[column] = value
+                    while cells and cells[-1] is None:
+                        cells.pop()
+                    if cells:
+                        yield index, int(element.get('r')), cells
+                    if data is not None:
+                        data.clear()  # 读过的行不留在内存里
+
+
+def verify_workbook(source, workbook, encoding=None):
+    """读回 XLSX 与 CSV 逐格对照：表头、行列位置、数字原文和文字都要相同；有一格不同就报错。"""
+    encoding = encoding or _encoding(source)
+    rows = cells = width = 0
+    for want, got in itertools.zip_longest(_expected_rows(source, encoding), _workbook_rows(workbook)):
+        if want != got:
+            sheet, line, _ = want or got
+            raise ValueError(f'Excel 表与 CSV 不一致：第 {sheet + 1} 张表第 {line} 行')
+        rows += want[1] != 1
+        cells += sum(cell is not None for cell in want[2])
+        width = max(width, len(want[2]))
+    return {'identical': True, 'data_rows': rows, 'columns': width, 'cells': cells}
 
 
 # ---------------------------------------------------------------- 坐标 ----
@@ -269,11 +418,11 @@ def _time_axis(t0, t1):
     return t0, t1, ticks, texts, f'Time ({prefix}s)'
 
 
-def _envelope(path, time, chosen, start, end, low, high, columns):
+def _envelope(path, time, chosen, start, end, low, high, columns, encoding='utf-8-sig'):
     """每个像素列记录 (首值, 最小, 最大, 末值)。"""
     bins = [[None] * columns for _ in chosen]
     span = high - low
-    for t, values in _rows(path, time, chosen, start, end):
+    for t, values in _rows(path, time, chosen, start, end, encoding):
         column = min(columns - 1, max(0, int((t - low) / span * (columns - 1) + 0.5)))
         for k, value in enumerate(values):
             if value is None:
@@ -434,65 +583,40 @@ def _png_available():
 
 
 def waveforms(source, folder, name=None, signals=None, start=None, end=None, svg=False):
-    """写出 <name>.xlsx（数据 + 统计）和 <name>.png（无 Pillow 或 svg=True 时 .svg），返回摘要。"""
+    """写出 <name>.xlsx（CSV 的逐格副本）和 <name>.png（无 Pillow 或 svg=True 时 .svg），返回摘要。
+
+    signals、start、end 只决定曲线和 summary 用哪些信号、哪段时间；Excel 表总是 CSV 的全部内容。
+    """
     source, folder = Path(source).resolve(), Path(folder).resolve()
     if start is not None and end is not None and end <= start:
         raise ValueError('结束时间必须大于开始时间')
-    header, time, chosen = _columns(source, signals)
+    encoding = _encoding(source)
+    header, time, chosen = _columns(source, signals, encoding)
     names = [header[i] for i in chosen]
+    stats = [Stats() for _ in chosen]
+    samples, first, last = 0, None, None
+    for t, values in _rows(source, time, chosen, start, end, encoding):
+        samples += 1
+        first = t if first is None else first
+        last = t
+        for stat, value in zip(stats, values):
+            stat.add(t, value)
+    if samples < 2:
+        raise ValueError('时间窗内少于 2 个样本，无法画曲线')
+    if first == last:
+        raise ValueError('时间窗内所有样本的时间相同，无法画曲线')
+    summary = {n: s.summary() for n, s in zip(names, stats)}
+
     # 离线预仿真不是 PSIM 结果：输出名带 presim，deliver 不会把它交给客户。
     name = name or ('presim-waveforms' if 'presim' in source.name.lower() else 'waveforms')
     folder.mkdir(parents=True, exist_ok=True)
     workbook_path = folder / f'{name}.xlsx'
-    stats = [Stats() for _ in chosen]
-    samples, first, last = 0, None, None
-
-    def data():
-        nonlocal samples, first, last
-        for t, values in _rows(source, time, chosen, start, end):
-            samples += 1
-            first = t if first is None else first
-            last = t
-            for stat, value in zip(stats, values):
-                stat.add(t, value)
-            yield [t, *values]
-
-    workbook = Workbook(workbook_path)
-    complete = False
     try:
-        rows, sheets = data(), 0
-        while True:
-            chunk = itertools.islice(rows, MAX_ROWS - 1)
-            head = next(chunk, None)
-            if head is None and sheets:
-                break
-            sheets += 1
-            title = '波形数据' if sheets == 1 else f'波形数据 {sheets}'
-            widths = [16] * (len(names) + 1)
-            body = () if head is None else itertools.chain([head], chunk)
-            workbook.sheet(title, itertools.chain([[header[time], *names]], body), widths)
-            if head is None:
-                break
-        if samples < 2:
-            raise ValueError('时间窗内少于 2 个样本，无法画曲线')
-        summary = {n: s.summary() for n, s in zip(names, stats)}
-        info = [
-            ['项目', '值'],
-            ['数据来源', source.name],
-            ['采样点数', samples],
-            ['开始时间 (s)', first],
-            ['结束时间 (s)', last],
-            ['说明', '平均值和有效值按时间加权，覆盖上面的整个时间范围（可能含启动过程）；稳态指标请按窗口测量。'],
-            [],
-            ['信号', '最小值', '最大值', '末值', '平均值', '有效值'],
-            *([n, v['min'], v['max'], v['final'], v['mean'], v['rms']] for n, v in summary.items()),
-        ]
-        workbook.sheet('统计', info, (16, 16, 16, 16, 16, 16), frozen=False)
-        complete = True
-    finally:
-        workbook.close()
-        if not complete:
-            workbook_path.unlink(missing_ok=True)
+        sheets = copy_to_workbook(source, workbook_path, encoding)
+        check = verify_workbook(source, workbook_path, encoding)
+    except BaseException:
+        workbook_path.unlink(missing_ok=True)
+        raise
 
     warnings = []
     plotted = names[:MAX_PANELS]
@@ -500,9 +624,6 @@ def waveforms(source, folder, name=None, signals=None, start=None, end=None, svg
         warnings.append(
             f'信号超过 {MAX_PANELS} 个，曲线图只画前 {MAX_PANELS} 个；用 signals 选择要画的信号，表格含全部信号'
         )
-    if first == last:
-        workbook_path.unlink()
-        raise ValueError('时间窗内所有样本的时间相同，无法画曲线')
     for old in (folder / f'{name}.png', folder / f'{name}.svg'):
         old.unlink(missing_ok=True)
     footer = f'Data: {source.name}, {samples} samples. Each pixel column shows the min-max of its samples.'
@@ -512,7 +633,7 @@ def waveforms(source, folder, name=None, signals=None, start=None, end=None, svg
         if draw is _draw_png and (svg or not _png_available()):
             continue
         columns = (WIDTH - LEFT - RIGHT) * scale
-        bins = _envelope(source, time, chosen[: len(plotted)], start, end, t_axis[0], t_axis[1], columns)
+        bins = _envelope(source, time, chosen[: len(plotted)], start, end, t_axis[0], t_axis[1], columns, encoding)
         _, boxes = _layout(len(plotted))
         panels = []
         for signal, cells, box in zip(plotted, bins, boxes):
@@ -532,13 +653,14 @@ def waveforms(source, folder, name=None, signals=None, start=None, end=None, svg
     return {
         'csv': str(source),
         'xlsx': str(workbook_path),
+        'xlsx_check': dict(check, sheets=sheets),
         'plot': str(plot),
         'plot_format': plot.suffix[1:],
         'signals': names,
         'plotted': plotted,
         'samples': samples,
         'time': [first, last],
-        'sheets': sheets + 1,
+        'sheets': sheets,
         'summary': summary,
         'source': 'drawn from CSV data with a per-pixel min-max envelope; not a SIMVIEW screenshot',
         'warnings': warnings,
@@ -550,9 +672,11 @@ def main(argv=None):
     parser.add_argument('csv', type=Path, help='波形 CSV（第一行列名，含 Time 列）')
     parser.add_argument('folder', type=Path, help='输出目录')
     parser.add_argument('--name', help='输出文件名（不含扩展名），默认 waveforms')
-    parser.add_argument('--signal', action='append', default=[], help='只画、只导出这些信号，可重复')
-    parser.add_argument('--start', type=float, help='开始时间 (s)')
-    parser.add_argument('--end', type=float, help='结束时间 (s)')
+    parser.add_argument(
+        '--signal', action='append', default=[], help='只画这些信号（Excel 表总是 CSV 的全部内容），可重复'
+    )
+    parser.add_argument('--start', type=float, help='曲线和统计的开始时间 (s)')
+    parser.add_argument('--end', type=float, help='曲线和统计的结束时间 (s)')
     parser.add_argument('--svg', action='store_true', help='画 SVG 而不是 PNG')
     args = parser.parse_args(argv)
     try:
