@@ -1,0 +1,48 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check version numbers and take the notes from the changelog
+        run: |
+          python3 - "${GITHUB_REF_NAME#v}" > notes.md <<'EOF'
+          import json, os, pathlib, re, sys
+
+          version = sys.argv[1]
+          read = lambda path: pathlib.Path(path).read_text(encoding='utf-8')
+          found = {path: json.loads(read(path))['version'] for path in ('package.json', '.claude-plugin/plugin.json')}
+          for skill in ('ad-schematic-layout', 'psim-simulation-layout'):
+              path = f'skills/{skill}/scripts/mcp_server.py'
+              found[path] = re.search(r"'version': '([^']+)'", read(path)).group(1)
+          wrong = {path: value for path, value in found.items() if value != version}
+          if wrong:
+              sys.exit(f'标签 v{version} 与这些文件里的版本号不一致：{wrong}')
+          section = re.search(rf'^## {re.escape(version)}\n(.*?)(?=^## |\Z)', read('CHANGELOG.md'), re.M | re.S)
+          if not section:
+              sys.exit(f'CHANGELOG.md 没有 {version} 一节')
+          print(section.group(1).strip())
+          print('\n### 安装这个版本 / Install this version\n')
+          print(f'```bash\nnpx -y github:{os.environ["GITHUB_REPOSITORY"]}#v{version}\n```')
+          EOF
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: The tag installs with npx on npm 10
+        run: |
+          npm --version
+          npx -y "github:$GITHUB_REPOSITORY#$GITHUB_REF_NAME" install --home "$RUNNER_TEMP/home"
+          npx -y "github:$GITHUB_REPOSITORY#$GITHUB_REF_NAME" check --home "$RUNNER_TEMP/home"
+          test -f "$RUNNER_TEMP/home/.claude/skills/psim-simulation-layout/SKILL.md"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag

@@ -30,6 +30,7 @@
 - AD 左右朝向的电源端口名称按 AD 的规则从符号末端向外读，不再误报压在自己的符号上。
 - 仿原生出图逐字排版：字宽取无微调步进，不做字距调整（与原生导出一致）；Mac 上 Pillow 没有 raqm 排版引擎时也得到与 Linux、Windows 相同的图像尺寸和像素。
 - CI 的 Windows 机器上用真实 cmd.exe 运行生成的 `build.bat` 和 `run.bat`：没有 AD/PSIM 或没有 Python 时停下并说明原因、写出报告、重跑保留失败结果；中文名称、带空格路径和带引号的 `PSIM_DIR`/`AD_EXE` 都覆盖。`run.bat` 的报错输出改为 UTF-8，输出被重定向时中文报错不再出错。
+- 发布：推送 `v版本号` 标签时，GitHub Actions 先核对 package.json、plugin.json 和两份 MCP 服务器里的版本号与标签一致，再用 npm 10 按标签试装一次，然后用更新记录里这一版的内容生成 Release。可以用 `npx -y github:1837620622/ad-and-psim-skill#v1.3.0` 固定安装这个版本。
 - 两个 SKILL.md 增加“逐步操作（照着做）”：每一步的命令、要看的 JSON 字段、按 finding 代码的处理方法和常见错误表。
 - MCP 的 `--with` 相对路径先按当前目录找，找不到再按 `mcp_server.py` 所在目录找；目录里没有 `mcp_tools.py` 时直接报错，不再启动后崩溃。
 - 测试增加 MCP 改图流程（导入现有图纸、改参数、挪器件、改位号、故意压字后用 `place_text` 修好、重新生成、渲染、交付）；CI 增加“新手”任务：在 Windows、macOS、Linux 和系统自带 Python 上不克隆仓库，用 npx 一条命令安装，再照技能说明从示例计划做到交付，检查客户目录里没有 JSON、脚本和日志，最后卸载。

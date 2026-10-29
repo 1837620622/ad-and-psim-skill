@@ -27,4 +27,6 @@ Mac/Linux 上用 `handoff` 准备任务，由 Windows 的 `run.bat` 原生执行
 
 用户的原始工程和本机参考副本不删除。`_核验/`、客户材料、`references/images` 与 `references/professional` 下的本机副本不进 Git。公开参考只放官方链接，示例图片只用自建电路。
 
+发布新版本：改 `package.json`、`.claude-plugin/plugin.json`、两份 `mcp_server.py` 里的版本号并在 `CHANGELOG.md` 写好这一节，CI 通过后推送 `v版本号` 标签，`release` 工作流核对版本号、按标签试装，再用更新记录生成 Release。
+
 推送到 GitHub 须有用户明确指示；推送前检查提交身份、授权声明、链接、语法和待提交文件。本项目为专有商业授权，见 LICENSE；微信 1837620622。不要把第三方内容改称自有或开源授权，不修改全局记忆。

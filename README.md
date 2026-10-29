@@ -2,8 +2,9 @@
 
 **简体中文** · [English](README.en.md)
 
-[更新记录](CHANGELOG.md) · [实测记录](docs/VALIDATION.md)
+[更新记录](CHANGELOG.md) · [发布版本](https://github.com/1837620622/ad-and-psim-skill/releases) · [实测记录](docs/VALIDATION.md)
 
+[![Release](https://img.shields.io/github/v/release/1837620622/ad-and-psim-skill)](https://github.com/1837620622/ad-and-psim-skill/releases/latest)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-c0392b)](LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab)
 ![Windows | macOS | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555555)
@@ -153,7 +154,7 @@ npx -y github:1837620622/ad-and-psim-skill uninstall    # 只删除安装器装�
 
 用 Python 安装器时对应 `--check` 和 `--uninstall`；用 `--link` 安装的，`git pull` 后即为最新。
 
-要装某个分支或标签，在名字后面加 `#分支名`，例如 `npx -y github:1837620622/ad-and-psim-skill#main`。npm 10（Node 22 自带）用 40 位完整提交号安装 GitHub 包会报 `GitFetcher requires an Arborist constructor`，这是 npm 的问题：改用分支或标签，或升级到 npm 11（`npm install -g npm@11`）。
+不加 `#` 时装的是 `main` 分支上的最新代码。要固定在某个发布版本，在名字后面加 `#标签名`，例如 `npx -y github:1837620622/ad-and-psim-skill#v1.3.0`；装分支同理（`#main`）。每个版本改了什么见 [更新记录](CHANGELOG.md) 和 [Releases](https://github.com/1837620622/ad-and-psim-skill/releases)。npm 10（Node 22 自带）用 40 位完整提交号安装 GitHub 包会报 `GitFetcher requires an Arborist constructor`，这是 npm 的问题：改用分支或标签，或升级到 npm 11（`npm install -g npm@11`）。
 
 ## 使用
 

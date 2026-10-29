@@ -45,7 +45,7 @@ PSIM 当前 RC 基准 CSV 与交接任务返回 CSV 的 SHA-256 相同：
 python -m unittest discover -s tests -v
 ```
 
-无需 AD 或 PSIM。CI 配置 Windows、macOS、Linux 与 Python 3.10/3.13；1.2.0 在本机 Windows/Python 3.12 运行 84 项测试，1.3.0 的修改在 Linux 上用 Python 3.10 和 3.13 运行 139 项（其中 3 项只在 Windows 上用 cmd.exe 实际运行 `build.bat` 和 `run.bat`，由 CI 的 Windows 机器执行；Linux 上 3.13 装 Pillow 13 和 resvg-py 时其余全部运行，Python 3.10 没有 Pillow 和 resvg-py，另跳过仿原生出图等 7 项）。覆盖：
+无需 AD 或 PSIM。CI 配置 Windows、macOS、Linux 与 Python 3.10/3.13；1.2.0 在本机 Windows/Python 3.12 运行 84 项测试，1.3.0 的修改在 Linux 上用 Python 3.10 和 3.13 运行 153 项（其中 3 项只在 Windows 上用 cmd.exe 实际运行 `build.bat` 和 `run.bat`，由 CI 的 Windows 机器执行；Linux 上 3.13 装 Pillow 13 和 resvg-py 时其余全部运行，Python 3.10 没有 Pillow 和 resvg-py，另跳过仿原生出图等 7 项）。覆盖：
 
 - 排版预检：两项示例 0 error、0 warning；悬空线、浮空标号、离栅格热端、隐式短接、不可编码字符等结构错误；文字重叠、穿件导线、四向连接、浮动标题、稀疏图面等版面问题；PSIM 的文字压符号、导线穿符号、仿真控制位置、参数写法。
 - SchDoc 读写：标准库读写复合文档；二进制引脚记录解码；示例生成文件的 SHA-256 固定（跨系统字节一致）；导入后重建的记录完全相同；各缩放比例下无源件热端在栅格上。
